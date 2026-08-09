@@ -1,10 +1,10 @@
 # DocuMesh REST API Reference (`v1`)
 
-Welcome to the **DocuMesh Engine** REST API documentation. The API provides complete programmatic control over document ingestion, LangGraph state machine execution, cross-document reconciliation, Human/MCP approval gates, branching conversation trees, and deliverable exports.
+Welcome to the **DocuMesh Engine** REST API documentation. The API provides complete programmatic control over document ingestion, LangGraph state machine execution, cross-document reconciliation, Human/MCP approval gates, branching conversation trees, dynamic skills/playbooks, prompt evaluations, and time-travel state rewind.
 
 ---
 
-## 🌐 Base URL & Interactive Docs
+## 🌐 Base Endpoint & Swagger UI
 
 - **Base Endpoint:** `http://localhost:8000/api/v1`
 - **Interactive OpenAPI / Swagger UI:** `http://localhost:8000/docs`
@@ -42,7 +42,7 @@ Check system health, database readiness, and Redis cache connection status.
 
 ---
 
-## 📁 2. Projects API (`/projects`)
+## 📁 2. Projects & Time Travel API (`/projects`)
 
 ### `POST /api/v1/projects`
 Create a new project workspace.
@@ -52,29 +52,6 @@ Create a new project workspace.
 {
   "project_name": "Greenfield Tech Park",
   "doc_folder": "/Users/souvikojha/doctask-souvik-ojha/test_data/greenfield_tech_park"
-}
-```
-
-**Response `200 OK`:**
-```json
-{
-  "project_id": "proj_greenfield_tech_park",
-  "status": "created",
-  "doc_folder": "/Users/souvikojha/doctask-souvik-ojha/test_data/greenfield_tech_park"
-}
-```
-
----
-
-### `GET /api/v1/projects`
-List active project workspaces for current tenant.
-
-**Response `200 OK`:**
-```json
-{
-  "projects": [
-    "proj_greenfield_tech_park"
-  ]
 }
 ```
 
@@ -99,89 +76,56 @@ Trigger or resume 7-stage LangGraph state machine execution up to the Human/MCP 
 ---
 
 ### `GET /api/v1/projects/{project_id}/status`
-Query current project pipeline status and checkpoint information.
-
-**Response `200 OK`:**
-```json
-{
-  "project_id": "proj_greenfield_tech_park",
-  "status": "AWAITING_HUMAN_GATE",
-  "current_node": "GATE",
-  "pending_findings_count": 5,
-  "register_ready": true
-}
-```
+Query current project pipeline status and checkpointer information.
 
 ---
 
 ### `GET /api/v1/projects/{project_id}/register`
 Retrieve final reconciled Project Register deliverable (requires completing Human Gate first).
 
+---
+
+### `GET /api/v1/projects/{project_id}/history`
+Retrieve time-travel checkpoint history across node runs.
+
 **Response `200 OK`:**
 ```json
 {
   "project_id": "proj_greenfield_tech_park",
-  "project_name": "Greenfield Tech Park - Phase 1",
-  "version": 1,
-  "content_hash": "21f21520ee73",
-  "entries": [
-    {
-      "entity_key": "project:total_contract_value",
-      "title": "Project Total Contract Value",
-      "reconciled_value": "Rs 14,20,00,000",
-      "unit": "INR",
-      "status": "SUPERSEDED",
-      "primary_citation": {
-        "doc_id": "contract_amendment_01.docx",
-        "filename": "contract_amendment_01.docx",
-        "location": "Section 1",
-        "exact_quote": "revised from Rs 12,50,00,000 to Rs 14,20,00,000"
-      }
-    }
+  "checkpoint_history": [
+    { "checkpoint_id": "chk_001", "seq_id": 1, "node_name": "INGEST", "created_at": "2026-08-10T01:00:00Z" },
+    { "checkpoint_id": "chk_002", "seq_id": 2, "node_name": "CLASSIFY", "created_at": "2026-08-10T01:00:01Z" },
+    { "checkpoint_id": "chk_003", "seq_id": 3, "node_name": "EXTRACT", "created_at": "2026-08-10T01:00:02Z" }
   ]
 }
 ```
+
+---
+
+### `POST /api/v1/projects/{project_id}/rewind`
+Rewind state machine back to a prior node checkpoint (Time Travel).
+
+**Request Body:**
+```json
+{
+  "target_node_name": "CLASSIFY"
+}
+```
+
+---
+
+### `GET /api/v1/projects/{project_id}/timeline`
+Get chronological project lineage timeline events.
+
+---
+
+### `GET /api/v1/projects/{project_id}/analytics`
+Get stage-by-stage token usage, USD cost, and latency analytics.
 
 ---
 
 ### `GET /api/v1/projects/{project_id}/graph`
 Get Knowledge Graph nodes and conflict edges for visualization.
-
-**Response `200 OK`:**
-```json
-{
-  "project_id": "proj_greenfield_tech_park",
-  "nodes": [
-    {
-      "id": "master_project_plan.docx",
-      "label": "master_project_plan.docx",
-      "type": "DOCUMENT",
-      "doc_type": "CONTRACT"
-    },
-    {
-      "id": "F-003",
-      "label": "Invoice Bills 100% Phase 3 Completion Against 40% Progress",
-      "type": "FINDING",
-      "severity": "CRITICAL"
-    }
-  ],
-  "edges": [
-    {
-      "source": "invoice_inv_2024_003.docx",
-      "target": "F-003",
-      "label": "SRC_A",
-      "is_conflict": true
-    }
-  ]
-}
-```
-
----
-
-### `GET /api/v1/projects/{project_id}/export-report`
-Export executive HTML report deliverable.
-
-**Response `200 OK` (`text/html`):** Returns styled HTML report ready for browser view or PDF print.
 
 ---
 
@@ -205,7 +149,7 @@ Upload new document file (`multipart/form-data`) for incremental update.
 ## 🚨 4. Findings & Gate API (`/projects/{project_id}/findings`)
 
 ### `GET /api/v1/projects/{project_id}/findings`
-List all detected findings. Query param `status` optional (`PRESENTED`, `APPROVED`, `REJECTED`).
+List all detected findings. Optional query param `status` (`PRESENTED`, `APPROVED`, `REJECTED`).
 
 ---
 
@@ -226,16 +170,14 @@ Approve or reject a finding at the Human/MCP Gate.
 ### `POST /api/v1/projects/{project_id}/findings/batch-approve`
 Batch approve or reject all pending findings.
 
-**Request Body:**
-```json
-{
-  "approved_all": true
-}
-```
-
 ---
 
-## 💬 5. Sessions & Conversation Trees API (`/projects/{project_id}/sessions`)
+## 💬 5. Sessions & Chat Engine API (`/projects/{project_id}/sessions`)
+
+### `GET /api/v1/projects/{project_id}/sessions`
+List all active chat sessions for a project.
+
+---
 
 ### `GET /api/v1/projects/{project_id}/sessions/{tree_id}`
 Retrieve the active linear thread for a conversation session.
@@ -243,12 +185,12 @@ Retrieve the active linear thread for a conversation session.
 ---
 
 ### `POST /api/v1/projects/{project_id}/sessions/{tree_id}/messages`
-Post a user message to a conversation session (triggers auto-session-naming).
+Send user message and receive document-grounded AI answer with citations.
 
 **Request Body:**
 ```json
 {
-  "content": "Please review the penalty clause terms in contract"
+  "content": "What is the penalty clause rate in the master project plan?"
 }
 ```
 
@@ -267,6 +209,16 @@ Branch the conversation tree starting from any parent `node_id`.
 
 ---
 
+### `PATCH /api/v1/projects/{project_id}/sessions/{tree_id}`
+Rename conversation session title.
+
+---
+
+### `DELETE /api/v1/projects/{project_id}/sessions/{tree_id}`
+Delete a chat session.
+
+---
+
 ## 🔍 6. Search API (`/projects/{project_id}/search`)
 
 ### `POST /api/v1/projects/{project_id}/search`
@@ -282,41 +234,56 @@ Sub-30ms Hybrid BM25 & Vector search across all document chunks.
 
 ---
 
-## 📦 7. Artifacts API (`/projects/{project_id}/artifacts`)
+## 🧠 7. Skills & Playbooks API (`/projects/{project_id}/skills`)
 
-### `POST /api/v1/projects/{project_id}/artifacts`
-Create a versioned, content-hashed deliverable artifact.
+### `GET /api/v1/projects/{project_id}/skills`
+List all registered dynamic skills/playbooks.
+
+---
+
+### `POST /api/v1/projects/{project_id}/skills`
+Register a new custom skill/playbook dynamically.
 
 **Request Body:**
 ```json
 {
-  "title": "Executive Summary",
-  "content": "# Executive Summary\nReconciled 16 entity metrics across 8 documents.",
-  "artifact_type": "markdown"
+  "name": "Safety Certificate Auditor",
+  "description": "Requires certified safety test report for steel deliveries",
+  "category": "SAFETY",
+  "rule_name": "Missing Safety Certificate Check",
+  "finding_title": "Safety Test Certificate Missing",
+  "finding_description": "Steel delivery missing certified tensile test report",
+  "severity": "HIGH",
+  "recommendation": "Obtain ISO certificate before clearance.",
+  "resolution_action": "REQUEST_CERTIFICATE: Issue request for safety certificate."
 }
 ```
 
 ---
 
-## 💻 cURL Example Workflows
+### `DELETE /api/v1/projects/{project_id}/skills/{skill_id}`
+Unregister a skill.
 
-### Complete End-to-End Workflow via cURL
+---
 
-```bash
-# 1. Health Check
-curl http://localhost:8000/api/v1/health
+## 📊 8. Evals & Prompt Optimization API (`/evals`)
 
-# 2. Trigger Pipeline Run
-curl -X POST http://localhost:8000/api/v1/projects/proj_greenfield_tech_park/run
+### `GET /api/v1/evals`
+List benchmark dataset test cases.
 
-# 3. Get Findings
-curl http://localhost:8000/api/v1/projects/proj_greenfield_tech_park/findings
+---
 
-# 4. Batch Approve Findings at Gate
-curl -X POST http://localhost:8000/api/v1/projects/proj_greenfield_tech_park/findings/batch-approve \
-  -H "Content-Type: application/json" \
-  -d '{"approved_all": true}'
+### `POST /api/v1/evals/run`
+Trigger prompt evaluation benchmark across all prompt variants and return winning prompt with scores.
 
-# 5. Get Reconciled Register
-curl http://localhost:8000/api/v1/projects/proj_greenfield_tech_park/register
-```
+---
+
+## 📦 9. Artifacts API (`/projects/{project_id}/artifacts`)
+
+### `POST /api/v1/projects/{project_id}/artifacts`
+Create a versioned deliverable artifact.
+
+---
+
+### `GET /api/v1/projects/{project_id}/artifacts/{artifact_id}`
+Retrieve artifact content.
