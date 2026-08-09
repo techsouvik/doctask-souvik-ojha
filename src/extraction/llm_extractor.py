@@ -1,4 +1,4 @@
-"""LLM Structured Fact Extractor with Pydantic schema validation & graceful fallback."""
+"""LLM Structured Fact Extractor with Gemini & OpenAI support, Pydantic validation, & graceful fallback."""
 
 import json
 import os
@@ -32,23 +32,34 @@ class LLMExtractionSchema(BaseModel):
 
 
 async def extract_facts_llm_async(doc: DocumentMetadata) -> List[ExtractedFact]:
-    """Extract facts using LLM structured output with fallback to heuristic extractor."""
-    api_key = settings.openai_api_key or os.getenv("OPENAI_API_KEY", "")
+    """Extract facts using LLM structured output (Gemini / OpenAI) with fallback to heuristic extractor."""
+    gemini_key = settings.gemini_api_key or settings.google_api_key or os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
+    openai_key = settings.openai_api_key or os.getenv("OPENAI_API_KEY", "")
 
-    if not api_key:
-        logger.info("openai_key_missing_using_heuristic_extractor", filename=doc.filename)
+    if not gemini_key and not openai_key:
+        logger.info("llm_keys_missing_using_heuristic_extractor", filename=doc.filename)
         from src.extraction.extractor import extract_facts_heuristic
         return extract_facts_heuristic(doc)
 
     try:
-        from langchain_openai import ChatOpenAI
         from langchain_core.prompts import ChatPromptTemplate
 
-        model = ChatOpenAI(
-            model=settings.default_model,
-            api_key=SecretStr(api_key),
-            temperature=0.0
-        ).with_structured_output(LLMExtractionSchema)
+        if gemini_key:
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            logger.info("using_gemini_llm_provider", filename=doc.filename, model=settings.default_gemini_model)
+            model = ChatGoogleGenerativeAI(
+                model=settings.default_gemini_model,
+                google_api_key=gemini_key,
+                temperature=0.0
+            ).with_structured_output(LLMExtractionSchema)
+        else:
+            from langchain_openai import ChatOpenAI
+            logger.info("using_openai_llm_provider", filename=doc.filename, model=settings.default_model)
+            model = ChatOpenAI(
+                model=settings.default_model,
+                api_key=SecretStr(openai_key),
+                temperature=0.0
+            ).with_structured_output(LLMExtractionSchema)
 
         prompt = ChatPromptTemplate.from_messages([
             ("system",
@@ -60,7 +71,6 @@ async def extract_facts_llm_async(doc: DocumentMetadata) -> List[ExtractedFact]:
 
         chain = prompt | model
 
-        logger.info("calling_llm_extraction", filename=doc.filename, model=settings.default_model)
         raw_result = await chain.ainvoke({
             "filename": doc.filename,
             "doc_type": doc.doc_type.value,
@@ -78,7 +88,6 @@ async def extract_facts_llm_async(doc: DocumentMetadata) -> List[ExtractedFact]:
         full_text = doc.extracted_text or ""
 
         for item in result.facts:
-            # Value Normalization
             norm_val: Any = item.raw_value
             if item.unit == "INR" or "crore" in item.raw_value.lower() or "lakh" in item.raw_value.lower() or "," in item.raw_value:
                 curr = normalize_currency(item.raw_value)
