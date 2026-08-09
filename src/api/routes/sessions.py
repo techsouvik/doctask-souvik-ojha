@@ -1,12 +1,13 @@
-"""Sessions & Conversation Trees API Router."""
+"""Sessions & Chat Engine API Router with document-aware Q&A and branching trees."""
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from src.session.tree import SessionTreeManager
+from src.session.chat_engine import ChatEngine
 
-router = APIRouter(prefix="/projects/{project_id}/sessions", tags=["Sessions & Conversation Trees"])
+router = APIRouter(prefix="/projects/{project_id}/sessions", tags=["Chat & Session Trees"])
 _session_manager = SessionTreeManager()
 
 
@@ -18,6 +19,28 @@ class PostMessageRequest(BaseModel):
 class BranchMessageRequest(BaseModel):
     parent_node_id: str
     content: str
+
+
+class RenameSessionRequest(BaseModel):
+    title: str
+
+
+@router.get("")
+async def list_sessions(project_id: str):
+    """List all chat sessions for a project."""
+    session_list = []
+    for tree_id, tree in _session_manager._trees.items():
+        if tree.project_id == project_id:
+            session_list.append({
+                "tree_id": tree_id,
+                "title": tree.title,
+                "auto_named": tree.auto_named,
+                "message_count": len(tree.nodes),
+                "active_leaf_id": tree.active_leaf_id,
+                "updated_at": tree.updated_at
+            })
+
+    return {"project_id": project_id, "sessions": session_list}
 
 
 @router.get("/{tree_id}")
@@ -38,21 +61,15 @@ async def get_session_tree(project_id: str, tree_id: str):
 
 @router.post("/{tree_id}/messages")
 async def post_session_message(project_id: str, tree_id: str, req: PostMessageRequest):
-    """Post a user message to the conversation session."""
-    user_node = await _session_manager.add_user_message(tree_id, project_id, req.content, req.parent_node_id)
-
-    # Simulated AI response for conversation thread
-    ai_response = f"I've processed your message regarding: '{user_node.content}'. Running document reconciliation checks..."
-    assistant_node = await _session_manager.add_assistant_message(tree_id, project_id, ai_response, user_node.id)
-
-    tree = await _session_manager.get_or_create_tree(tree_id, project_id)
-
-    return {
-        "tree_id": tree_id,
-        "title": tree.title,
-        "user_node": user_node.model_dump(),
-        "assistant_node": assistant_node.model_dump()
-    }
+    """Send a user message and get a document-grounded AI response in chat."""
+    result = await ChatEngine.process_user_chat(
+        project_id=project_id,
+        tree_id=tree_id,
+        user_message=req.content,
+        parent_node_id=req.parent_node_id,
+        tree_manager=_session_manager
+    )
+    return result
 
 
 @router.post("/{tree_id}/branch")
@@ -60,17 +77,32 @@ async def branch_session_thread(project_id: str, tree_id: str, req: BranchMessag
     """Create a new branch in the conversation tree starting from a parent node_id."""
     try:
         user_node = await _session_manager.branch_from_node(tree_id, project_id, req.parent_node_id, req.content)
-        ai_response = f"Branch created from node {req.parent_node_id}. Processing new direction..."
-        assistant_node = await _session_manager.add_assistant_message(tree_id, project_id, ai_response, user_node.id)
-
-        tree = await _session_manager.get_or_create_tree(tree_id, project_id)
-
-        return {
-            "tree_id": tree_id,
-            "title": tree.title,
-            "branched_from_node_id": req.parent_node_id,
-            "user_node": user_node.model_dump(),
-            "assistant_node": assistant_node.model_dump()
-        }
+        result = await ChatEngine.process_user_chat(
+            project_id=project_id,
+            tree_id=tree_id,
+            user_message=req.content,
+            parent_node_id=user_node.id,
+            tree_manager=_session_manager
+        )
+        result["branched_from_node_id"] = req.parent_node_id
+        return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.patch("/{tree_id}")
+async def rename_session(project_id: str, tree_id: str, req: RenameSessionRequest):
+    """Rename session title."""
+    tree = await _session_manager.get_or_create_tree(tree_id, project_id)
+    tree.title = req.title
+    tree.auto_named = False
+    return {"tree_id": tree_id, "new_title": tree.title}
+
+
+@router.delete("/{tree_id}")
+async def delete_session(project_id: str, tree_id: str):
+    """Delete a chat session."""
+    if tree_id in _session_manager._trees:
+        del _session_manager._trees[tree_id]
+        return {"status": "deleted", "tree_id": tree_id}
+    raise HTTPException(status_code=404, detail=f"Session {tree_id} not found")
