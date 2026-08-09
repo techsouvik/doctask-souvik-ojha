@@ -1,10 +1,5 @@
 # DocuMesh Engine — Agentic Document Reconciliation System
 
-**Candidate:** Souvik Ojha (`doctask-souvik-ojha`)  
-**Task:** Task 1 — Build an Agentic System (SuperDocs Round 2 Selection Process)  
-**Domain:** Construction Project Management (*Greenfield Tech Park — Phase 1*)  
-**Architecture:** LangGraph State Machine + FastAPI + PostgreSQL/SQLite + React Review UI + MCP Server  
-
 ---
 
 ## Executive Overview
@@ -130,7 +125,3 @@ The system is evaluated against the 8 documents in `test_data/greenfield_tech_pa
    *Why:* Keeps update costs proportional to the new document rather than re-running the full 1,000-document corpus.
 
 ---
-
-## 📄 License & Attribution
-
-Built for the **SuperDocs Round 2 Selection Process** by Souvik Ojha. All rights reserved.
