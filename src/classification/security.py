@@ -31,3 +31,7 @@ def detect_prompt_injection(text: str) -> Tuple[bool, Optional[str], List[str]]:
         return True, reason, matches
 
     return False, None, []
+
+
+# Alias for backward compatibility
+scan_for_prompt_injection = detect_prompt_injection
