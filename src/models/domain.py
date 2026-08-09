@@ -73,7 +73,7 @@ class DocumentMetadata(BaseModel):
 class SourceCitation(BaseModel):
     doc_id: str
     filename: str
-    location: str  # e.g., "Section 4, paragraph 2" or "Page 2, Table 1"
+    location: str
     exact_quote: str
 
 
@@ -81,9 +81,9 @@ class ExtractedFact(BaseModel):
     fact_id: str
     project_id: str
     doc_id: str
-    entity_type: str  # e.g., "CONTRACT_VALUE", "HANDOVER_DATE", "EXPENDITURE_SUM"
-    entity_key: str   # canonical key e.g., "project:total_contract_value"
-    attribute: str    # e.g., "value", "rate", "date"
+    entity_type: str
+    entity_key: str
+    attribute: str
     raw_value: str
     normalized_value: Union[int, float, str, Dict[str, Any]]
     unit: Optional[str] = None
@@ -103,16 +103,17 @@ class Finding(BaseModel):
     source_a: SourceCitation
     source_b: Optional[SourceCitation] = None
     recommendation: str
+    resolution_action: Optional[str] = None  # AI Actionable Fix
     status: FindingStatus = FindingStatus.PRESENTED
     feedback: Optional[str] = None
     decided_at: Optional[datetime] = None
-    decided_by: Optional[str] = None  # "human" or "mcp" or "user_id"
+    decided_by: Optional[str] = None
 
 
 class Rule(BaseModel):
     rule_id: str
     name: str
-    check_type: str  # "ARITHMETIC", "PRESENCE", "CROSS_REFERENCE", "CONTRACT_MATCH"
+    check_type: str
     target_doc_type: DocumentType
     description: str
     severity: Severity
@@ -123,7 +124,7 @@ class ProjectRegisterEntry(BaseModel):
     title: str
     reconciled_value: Any
     unit: Optional[str] = None
-    status: str  # "CORROBORATED", "SUPERSEDED", "CONTRADICTED", "SINGLE_SOURCE"
+    status: str
     primary_citation: SourceCitation
     history: List[Dict[str, Any]] = Field(default_factory=list)
 
@@ -137,6 +138,15 @@ class ProjectRegister(BaseModel):
     entries: List[ProjectRegisterEntry] = Field(default_factory=list)
     approved_findings: List[Finding] = Field(default_factory=list)
     active_conflicts_count: int = 0
+
+
+class TimelineEvent(BaseModel):
+    event_date: str
+    doc_name: str
+    event_type: str
+    description: str
+    has_finding: bool = False
+    finding_id: Optional[str] = None
 
 
 class NodeUsage(BaseModel):

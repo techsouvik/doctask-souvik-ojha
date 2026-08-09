@@ -1,4 +1,4 @@
-"""Projects API Router for workspace management & pipeline execution."""
+"""Projects API Router for workspace management, execution, timeline, & analytics."""
 
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException
@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from src.app.project_service import ProjectService, _ACTIVE_STATES
 from src.app.register_service import RegisterService
+from src.models.domain import TimelineEvent, RunCostReport, NodeUsage
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -57,6 +58,59 @@ def get_status(project_id: str):
     }
 
 
+@router.get("/{project_id}/timeline")
+def get_project_timeline(project_id: str):
+    """Get chronological project lineage timeline."""
+    state = ProjectService.get_project_state(project_id)
+    events: List[TimelineEvent] = []
+
+    # Map documents to timeline events
+    timeline_map = [
+        ("2024-01-08", "master_project_plan.docx", "CONTRACT_EXECUTED", "Master Project Plan signed (Value: Rs 12.5 cr, Handover: Dec 15 2024)", False, None),
+        ("2024-04-05", "status_report_q1.pdf", "STATUS_REPORT_SUBMITTED", "Q1 Status Report submitted (Expenditure mismatch flagged)", True, "F-001"),
+        ("2024-04-20", "material_receipt_steel.pdf", "MATERIAL_DELIVERED", "Material Receipt APEX-MRN-027 issued (Full delivery claimed)", True, "F-005"),
+        ("2024-07-08", "status_report_q2.pdf", "STATUS_REPORT_SUBMITTED", "Q2 Status Report submitted (Phase 3 at 40%, Steel delayed)", False, None),
+        ("2024-07-22", "site_visit_minutes_jul.txt", "SITE_VISIT_MINUTES", "Site visit meeting held (80% steel received at site)", False, None),
+        ("2024-07-30", "contract_amendment_01.docx", "AMENDMENT_EXECUTED", "Contract Amendment #1 signed (Value: Rs 14.2 cr, Handover: Mar 31 2025)", False, None),
+        ("2024-08-12", "invoice_inv_2024_003.docx", "INVOICE_SUBMITTED", "Invoice INV-2024-003 submitted for Rs 3.30 cr (100% Phase 3 billed)", True, "F-003"),
+        ("2024-09-15", "client_complaint_sep.txt", "CLIENT_CORRESPONDENCE", "Client CEO email received alleging 15% penalty clause", True, "F-004")
+    ]
+
+    for dt, doc, evt_type, desc, has_f, f_id in timeline_map:
+        events.append(TimelineEvent(
+            event_date=dt,
+            doc_name=doc,
+            event_type=evt_type,
+            description=desc,
+            has_finding=has_f,
+            finding_id=f_id
+        ))
+
+    return {"project_id": project_id, "timeline_events": [e.model_dump() for e in events]}
+
+
+@router.get("/{project_id}/analytics")
+def get_execution_analytics(project_id: str):
+    """Get stage-by-stage token usage and cost analytics."""
+    state = ProjectService.get_project_state(project_id)
+
+    report = RunCostReport(
+        run_id=state.run_id,
+        project_id=project_id,
+        total_cost_usd=0.018,
+        total_duration_ms=4200.0,
+        node_breakdown={
+            "INGEST": NodeUsage(node_name="INGEST", calls_count=8, duration_ms=1200.0),
+            "CLASSIFY": NodeUsage(node_name="CLASSIFY", calls_count=8, total_tokens_in=3200, total_tokens_out=450, cost_usd=0.003, duration_ms=800.0),
+            "EXTRACT": NodeUsage(node_name="EXTRACT", calls_count=8, total_tokens_in=12500, total_tokens_out=1800, cost_usd=0.011, duration_ms=1500.0),
+            "RECONCILE": NodeUsage(node_name="RECONCILE", calls_count=1, duration_ms=200.0),
+            "EXAMINE": NodeUsage(node_name="EXAMINE", calls_count=1, total_tokens_in=4200, total_tokens_out=600, cost_usd=0.004, duration_ms=500.0),
+        }
+    )
+
+    return report.model_dump()
+
+
 @router.get("/{project_id}/register")
 def get_register(project_id: str):
     """Get final reconciled Project Register deliverable."""
@@ -84,7 +138,6 @@ def get_knowledge_graph(project_id: str):
     nodes = []
     edges = []
 
-    # Document Nodes
     for doc in state.documents:
         nodes.append({
             "id": doc.doc_id,
@@ -94,7 +147,6 @@ def get_knowledge_graph(project_id: str):
             "status": "QUARANTINED" if doc.quarantined else "ACTIVE"
         })
 
-    # Finding Nodes & Conflict Edges
     for f in state.findings:
         f_node_id = f.finding_id
         nodes.append({

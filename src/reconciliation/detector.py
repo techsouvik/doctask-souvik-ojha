@@ -1,7 +1,7 @@
-"""Conflict Detection Engine: Identifies contradictions and planted errors across facts."""
+"""Conflict Detection Engine: Identifies contradictions and generates AI resolution directives."""
 
 import uuid
-from typing import List, Union, Dict, Any
+from typing import List, Any
 from src.models.domain import ExtractedFact, Finding, FindingType, Severity, FindingStatus
 
 
@@ -13,15 +13,14 @@ def _to_float(val: Any) -> float:
 
 
 def detect_conflicts(facts: List[ExtractedFact]) -> List[Finding]:
-    """Examine extracted facts and generate structured Finding objects."""
+    """Examine extracted facts and generate structured Finding objects with AI resolution directives."""
     findings: List[Finding] = []
     project_id = facts[0].project_id if facts else "proj_default"
 
-    # Index facts by entity_key for fast lookup
     fact_map = {f.entity_key: f for f in facts}
 
     # -------------------------------------------------------------------------
-    # ERROR 1: Arithmetic mismatch in Status Report Q1 (Stated 3.20 cr vs Line Sum 3.50 cr)
+    # ERROR 1: Arithmetic mismatch in Status Report Q1
     # -------------------------------------------------------------------------
     stated_exp = fact_map.get("project:total_expenditure_stated")
     item1 = fact_map.get("q1:expenditure_item_1")
@@ -32,7 +31,7 @@ def detect_conflicts(facts: List[ExtractedFact]) -> List[Finding]:
         sum_items = _to_float(item1.normalized_value) + _to_float(item2.normalized_value) + _to_float(item3.normalized_value)
         stated_val = _to_float(stated_exp.normalized_value)
 
-        if abs(sum_items - stated_val) > 1.0:  # Difference of Rs 30 lakhs (3.50 cr - 3.20 cr)
+        if abs(sum_items - stated_val) > 1.0:
             findings.append(Finding(
                 finding_id="F-001",
                 project_id=project_id,
@@ -43,11 +42,12 @@ def detect_conflicts(facts: List[ExtractedFact]) -> List[Finding]:
                 source_a=stated_exp.citation,
                 source_b=item1.citation,
                 recommendation="Request clarified financial breakdown from Contractor Project Manager Rakesh Menon.",
+                resolution_action="ISSUE_REVISE_REQUEST: Request Project Manager to issue Q1 Status Report Corrigendum updating total expenditure to Rs 3.50 crores.",
                 status=FindingStatus.PRESENTED
             ))
 
     # -------------------------------------------------------------------------
-    # ERROR 2: Internal Quantity Mismatch in Status Report Q1 (8,500 cum vs 7,200 cum)
+    # ERROR 2: Internal Quantity Mismatch in Status Report Q1
     # -------------------------------------------------------------------------
     exc_narrative = fact_map.get("q1:excavation_narrative")
     exc_table = fact_map.get("q1:excavation_table")
@@ -67,11 +67,12 @@ def detect_conflicts(facts: List[ExtractedFact]) -> List[Finding]:
                 source_a=exc_narrative.citation,
                 source_b=exc_table.citation,
                 recommendation="Verify certified site quantity measurement sheet with Site Engineer.",
+                resolution_action="AUDIT_MEASUREMENT_BOOK: Verify physical site measurement book entry for excavation volume (7,200 cum vs 8,500 cum).",
                 status=FindingStatus.PRESENTED
             ))
 
     # -------------------------------------------------------------------------
-    # ERROR 3: Unearned Progress Billing (Invoice bills 100% Phase 3 vs Q2 Report 40%)
+    # ERROR 3: Unearned Progress Billing
     # -------------------------------------------------------------------------
     inv_billed = fact_map.get("invoice:inv_2024_003:phase3_billed_pct")
     q2_progress = fact_map.get("phase:3:progress_pct")
@@ -91,11 +92,12 @@ def detect_conflicts(facts: List[ExtractedFact]) -> List[Finding]:
                 source_a=inv_billed.citation,
                 source_b=q2_progress.citation,
                 recommendation="Hold payment on Invoice INV-2024-003 until Architect provides physical progress verification.",
+                resolution_action="CREDIT_NOTE_DIRECTIVE: Issue credit note / invoice adjustment of Rs 1.68 crores reducing payable amount to 40% verified progress (Rs 1.12 crores).",
                 status=FindingStatus.PRESENTED
             ))
 
     # -------------------------------------------------------------------------
-    # ERROR 4: Contract Term Mismatch (Client cites 15% penalty vs 0.5%/week cap 5%)
+    # ERROR 4: Contract Term Mismatch
     # -------------------------------------------------------------------------
     client_cited_penalty = fact_map.get("correspondence:cited_penalty_rate")
     contract_penalty_cap = fact_map.get("project:penalty_cap")
@@ -115,11 +117,12 @@ def detect_conflicts(facts: List[ExtractedFact]) -> List[Finding]:
                 source_a=client_cited_penalty.citation,
                 source_b=contract_penalty_cap.citation,
                 recommendation="Clarify actual contractual penalty terms (0.5%/week, 5% max cap) in formal response to Client CEO.",
+                resolution_action="FORMAL_REPLY_DRAFT: Draft executive clarification email citing Master Project Plan §12 (0.5%/week, 5% max cap = Rs 71 lakhs).",
                 status=FindingStatus.PRESENTED
             ))
 
     # -------------------------------------------------------------------------
-    # ERROR 5: Material Receipt Contradicted by Subsequent Status Report
+    # ERROR 5: Material Receipt Contradiction
     # -------------------------------------------------------------------------
     receipt_status = fact_map.get("receipt:steel:delivery_status")
     q2_steel_pct = fact_map.get("material:steel:delivery_pct")
@@ -138,6 +141,7 @@ def detect_conflicts(facts: List[ExtractedFact]) -> List[Finding]:
                 source_a=receipt_status.citation,
                 source_b=q2_steel_pct.citation,
                 recommendation="Audit site store inventory logs to reconcile physical steel tonnage delivered vs received.",
+                resolution_action="STORE_INVENTORY_AUDIT: Reconcile MRN-2024-027 weighbridge bills against physical site store steel inventory.",
                 status=FindingStatus.PRESENTED
             ))
 
