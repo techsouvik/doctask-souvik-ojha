@@ -1,9 +1,10 @@
-"""SQLAlchemy Database Schema for DocuMesh."""
+"""SQLAlchemy Database Layer with Session Persistence & Checkpointing."""
 
 import json
 from datetime import datetime
-from sqlalchemy import Column, String, Float, Integer, Boolean, Text, DateTime, ForeignKey, create_engine
-from sqlalchemy.orm import declarative_base, sessionmaker
+from typing import Optional, Dict, Any
+from sqlalchemy import Column, String, Float, Boolean, Text, DateTime, ForeignKey, create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker, Session
 
 Base = declarative_base()
 
@@ -12,7 +13,7 @@ class DBProject(Base):
     __tablename__ = "projects"
 
     id = Column(String, primary_key=True)
-    tenant_id = Column(String, nullable=False, index=True)
+    tenant_id = Column(String, nullable=False, default="tenant_default")
     name = Column(String, nullable=False)
     document_root = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -44,7 +45,7 @@ class DBFact(Base):
     entity_key = Column(String, nullable=False, index=True)
     attribute = Column(String, nullable=False)
     raw_value = Column(String, nullable=False)
-    normalized_value = Column(Text, nullable=True)  # JSON serialized
+    normalized_value = Column(Text, nullable=True)
     unit = Column(String, nullable=True)
     confidence = Column(Float, default=1.0)
     grounded = Column(Boolean, default=True)
@@ -80,8 +81,53 @@ class DBCheckpoint(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
-def init_db(db_path: str = "documesh.db"):
-    """Initialize database tables synchronously."""
-    engine = create_engine(f"sqlite:///{db_path}", echo=False)
-    Base.metadata.create_all(engine)
-    return sessionmaker(bind=engine)()
+_ENGINE = None
+_SESSION_FACTORY = None
+
+
+def get_db_session(db_path: str = "documesh.db") -> Session:
+    """Get database session for SQLite."""
+    global _ENGINE, _SESSION_FACTORY
+    if _ENGINE is None:
+        _ENGINE = create_engine(f"sqlite:///{db_path}", echo=False)
+        Base.metadata.create_all(_ENGINE)
+        _SESSION_FACTORY = sessionmaker(bind=_ENGINE)
+    assert _SESSION_FACTORY is not None
+    return _SESSION_FACTORY()
+
+
+def save_checkpoint(project_id: str, node_name: str, state_data: Dict[str, Any], db_path: str = "documesh.db"):
+    """Persist pipeline checkpoint state to database."""
+    session = get_db_session(db_path)
+    try:
+        cp_id = f"chk_{project_id}_{node_name}_{int(datetime.utcnow().timestamp())}"
+        cp = DBCheckpoint(
+            id=cp_id,
+            project_id=project_id,
+            node_name=node_name,
+            state_json=json.dumps(state_data, default=str),
+            created_at=datetime.utcnow()
+        )
+        session.add(cp)
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        print(f"Error saving checkpoint: {e}")
+    finally:
+        session.close()
+
+
+def load_latest_checkpoint(project_id: str, db_path: str = "documesh.db") -> Optional[Dict[str, Any]]:
+    """Load latest checkpoint state for a project."""
+    session = get_db_session(db_path)
+    try:
+        cp = session.query(DBCheckpoint).filter_by(project_id=project_id).order_by(DBCheckpoint.created_at.desc()).first()
+        if cp is not None:
+            raw_json = getattr(cp, "state_json", None)
+            if raw_json:
+                return json.loads(str(raw_json))
+    except Exception as e:
+        print(f"Error loading checkpoint: {e}")
+    finally:
+        session.close()
+    return None

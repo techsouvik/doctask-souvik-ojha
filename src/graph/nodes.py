@@ -1,4 +1,4 @@
-"""LangGraph node handlers for DocuMesh state machine."""
+"""LangGraph node handlers for DocuMesh state machine with persistent DB checkpointing."""
 
 import os
 import time
@@ -11,11 +11,11 @@ from src.extraction.extractor import extract_facts
 from src.reconciliation.resolver import resolve_entity_history
 from src.examination.engine import run_examination_pipeline
 from src.models.domain import ProjectRegister, FindingStatus
+from src.models.database import save_checkpoint
 
 
 def node_ingest(state: PipelineState) -> Dict[str, Any]:
     """1. INGEST NODE: Recursively scan doc_folder and ingest all files."""
-    start_t = time.time()
     folder = state.doc_folder
     ingested_docs = list(state.documents)
     existing_checksums = [d.checksum for d in ingested_docs]
@@ -35,11 +35,13 @@ def node_ingest(state: PipelineState) -> Dict[str, Any]:
 
     print(f"  Total documents in session: {len(ingested_docs)}")
 
-    return {
+    res = {
         "documents": [d.model_dump() for d in ingested_docs],
         "current_node": "INGEST",
         "status": "IN_PROGRESS"
     }
+    save_checkpoint(state.project_id, "INGEST", res)
+    return res
 
 
 def node_classify(state: PipelineState) -> Dict[str, Any]:
@@ -53,11 +55,13 @@ def node_classify(state: PipelineState) -> Dict[str, Any]:
         status_symbol = "🚨 QUARANTINED" if updated_doc.quarantined else f"✓ {updated_doc.doc_type.value}"
         print(f"  {updated_doc.filename} -> {status_symbol} (conf: {updated_doc.classification_confidence:.2f})")
 
-    return {
+    res = {
         "documents": [d.model_dump() for d in classified_docs],
         "current_node": "CLASSIFY",
         "status": "IN_PROGRESS"
     }
+    save_checkpoint(state.project_id, "CLASSIFY", res)
+    return res
 
 
 def node_extract(state: PipelineState) -> Dict[str, Any]:
@@ -74,11 +78,13 @@ def node_extract(state: PipelineState) -> Dict[str, Any]:
         all_facts.extend(facts)
         print(f"  ✓ Extracted {len(facts)} grounded facts from {doc.filename}")
 
-    return {
+    res = {
         "facts": [f.model_dump() for f in all_facts],
         "current_node": "EXTRACT",
         "status": "IN_PROGRESS"
     }
+    save_checkpoint(state.project_id, "EXTRACT", res)
+    return res
 
 
 def node_reconcile(state: PipelineState) -> Dict[str, Any]:
@@ -98,11 +104,13 @@ def node_reconcile(state: PipelineState) -> Dict[str, Any]:
 
     print(f"  ✓ Resolved {len(entries)} entity keys across {len(state.facts)} facts. Register hash: {reg_hash}")
 
-    return {
+    res = {
         "register": register.model_dump(),
         "current_node": "RECONCILE",
         "status": "IN_PROGRESS"
     }
+    save_checkpoint(state.project_id, "RECONCILE", res)
+    return res
 
 
 def node_examine(state: PipelineState) -> Dict[str, Any]:
@@ -126,12 +134,14 @@ def node_examine(state: PipelineState) -> Dict[str, Any]:
         status_str = f" [{f.status.value}]" if f.status != FindingStatus.PRESENTED else ""
         print(f"    - [{f.severity.value}] {f.finding_id}: {f.title}{status_str}")
 
-    return {
+    res = {
         "findings": [f.model_dump() for f in findings],
         "pending_findings": [f.model_dump() for f in pending],
         "current_node": "EXAMINE",
         "status": "AWAITING_HUMAN_GATE" if pending else "IN_PROGRESS"
     }
+    save_checkpoint(state.project_id, "EXAMINE", res)
+    return res
 
 
 def node_gate(state: PipelineState) -> Dict[str, Any]:
@@ -141,18 +151,22 @@ def node_gate(state: PipelineState) -> Dict[str, Any]:
 
     if pending:
         print(f"  ⏸️ Pipeline paused at GATE: {len(pending)} findings awaiting human decision.")
-        return {
+        res = {
             "pending_findings": [f.model_dump() for f in pending],
             "current_node": "GATE",
             "status": "AWAITING_HUMAN_GATE"
         }
+        save_checkpoint(state.project_id, "GATE", res)
+        return res
 
     print("  ✓ All findings resolved by human/MCP. Proceeding to delivery.")
-    return {
+    res = {
         "pending_findings": [],
         "current_node": "GATE",
         "status": "IN_PROGRESS"
     }
+    save_checkpoint(state.project_id, "GATE", res)
+    return res
 
 
 def node_deliver(state: PipelineState) -> Dict[str, Any]:
@@ -165,8 +179,10 @@ def node_deliver(state: PipelineState) -> Dict[str, Any]:
         state.register.active_conflicts_count = len(approved)
 
     print(f"  ✅ DELIVERABLE READY: Reconciled Register + {len(approved)} approved findings.")
-    return {
+    res = {
         "register": state.register.model_dump() if state.register else None,
         "current_node": "DELIVER",
         "status": "COMPLETED"
     }
+    save_checkpoint(state.project_id, "DELIVER", res)
+    return res
