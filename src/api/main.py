@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
-from src.api.router import router as api_router
+from src.api.routes import all_routers
 from src.api.middleware import TenantContextMiddleware
 from src.config import settings
 
@@ -27,8 +27,9 @@ app.add_middleware(
 # Multi-Tenancy Middleware
 app.add_middleware(TenantContextMiddleware)
 
-# Include API Router
-app.include_router(api_router)
+# Include All Domain Routers under /api/v1
+for r in all_routers:
+    app.include_router(r, prefix="/api/v1")
 
 # UI Directory
 UI_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "ui")
