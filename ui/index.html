@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DocuMesh Engine — Agentic Document Reconciliation</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React & ReactDOM CDN -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <!-- Babel for JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans antialiased min-h-screen">
+
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const API_BASE = "http://localhost:8000/api/v1";
+    const PROJECT_ID = "proj_greenfield_tech_park";
+
+    function App() {
+      const [statusData, setStatusData] = useState(null);
+      const [findings, setFindings] = useState([]);
+      const [register, setRegister] = useState(null);
+      const [activeTab, setActiveTab] = useState("gate"); // gate, register, docs
+      const [loading, setLoading] = useState(false);
+      const [feedbackInputs, setFeedbackInputs] = useState({});
+
+      const fetchStatus = async () => {
+        try {
+          const res = await fetch(`${API_BASE}/projects/${PROJECT_ID}/status`);
+          const data = await res.json();
+          setStatusData(data);
+        } catch (e) {
+          console.error("Fetch status error:", e);
+        }
+      };
+
+      const fetchFindings = async () => {
+        try {
+          const res = await fetch(`${API_BASE}/projects/${PROJECT_ID}/findings`);
+          const data = await res.json();
+          setFindings(data.findings || []);
+        } catch (e) {
+          console.error("Fetch findings error:", e);
+        }
+      };
+
+      const fetchRegister = async () => {
+        try {
+          const res = await fetch(`${API_BASE}/projects/${PROJECT_ID}/register`);
+          if (res.ok) {
+            const data = await res.json();
+            setRegister(data);
+          }
+        } catch (e) {
+          console.error("Fetch register error:", e);
+        }
+      };
+
+      const triggerRun = async () => {
+        setLoading(true);
+        try {
+          await fetch(`${API_BASE}/projects/${PROJECT_ID}/run`, { method: "POST" });
+          await fetchStatus();
+          await fetchFindings();
+          await fetchRegister();
+        } catch (e) {
+          console.error("Trigger run error:", e);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const handleApprove = async (findingId, approved) => {
+        const feedback = feedbackInputs[findingId] || "";
+        try {
+          await fetch(`${API_BASE}/projects/${PROJECT_ID}/findings/approve`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ finding_id: findingId, approved, feedback })
+          });
+          await fetchStatus();
+          await fetchFindings();
+          await fetchRegister();
+        } catch (e) {
+          console.error("Approve error:", e);
+        }
+      };
+
+      const handleBatchApprove = async (approvedAll) => {
+        try {
+          await fetch(`${API_BASE}/projects/${PROJECT_ID}/findings/batch-approve`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ approved_all: approvedAll })
+          });
+          await fetchStatus();
+          await fetchFindings();
+          await fetchRegister();
+        } catch (e) {
+          console.error("Batch approve error:", e);
+        }
+      };
+
+      useEffect(() => {
+        triggerRun();
+      }, []);
+
+      const pendingFindings = findings.filter(f => f.status === "PRESENTED");
+      const resolvedFindings = findings.filter(f => f.status !== "PRESENTED");
+
+      return (
+        <div class="max-w-7xl mx-auto px-4 py-6 space-y-6">
+          {/* Header */}
+          <header class="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-800 pb-4 gap-4">
+            <div>
+              <div class="flex items-center space-x-3">
+                <span class="bg-indigo-600 text-white font-bold px-2.5 py-1 rounded text-sm uppercase tracking-wider">DocuMesh</span>
+                <h1 class="text-2xl font-bold text-white">Greenfield Tech Park — Phase 1</h1>
+              </div>
+              <p class="text-slate-400 text-sm mt-1">Agentic Document Reconciliation Engine • Multi-Tenant &amp; Checkpointed</p>
+            </div>
+
+            <div class="flex items-center space-x-3">
+              <button 
+                onClick={triggerRun}
+                disabled={loading}
+                class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-medium text-sm transition flex items-center space-x-2 disabled:opacity-50">
+                <span>{loading ? "Processing..." : "Re-Run Pipeline"}</span>
+              </button>
+            </div>
+          </header>
+
+          {/* Pipeline Stage Bar */}
+          <div class="bg-slate-800/60 rounded-xl p-4 border border-slate-700/60">
+            <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">LangGraph Pipeline Stages</h3>
+            <div class="grid grid-cols-7 gap-2 text-center text-xs">
+              {[
+                { name: "1. INGEST", active: true },
+                { name: "2. CLASSIFY", active: true },
+                { name: "3. EXTRACT", active: true },
+                { name: "4. RECONCILE", active: true },
+                { name: "5. EXAMINE", active: true },
+                { name: "6. GATE", active: statusData?.status === "AWAITING_HUMAN_GATE", highlight: statusData?.status === "AWAITING_HUMAN_GATE" },
+                { name: "7. DELIVER", active: statusData?.status === "COMPLETED", done: statusData?.status === "COMPLETED" },
+              ].map((stage, i) => (
+                <div key={i} class={`py-2 px-1 rounded-lg font-medium border ${
+                  stage.done ? "bg-emerald-950/80 border-emerald-500/50 text-emerald-300" :
+                  stage.highlight ? "bg-amber-950/80 border-amber-500/80 text-amber-300 animate-pulse" :
+                  stage.active ? "bg-slate-700/80 border-slate-600 text-slate-200" :
+                  "bg-slate-900 border-slate-800 text-slate-500"
+                }`}>
+                  {stage.name}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Navigation Tabs */}
+          <div class="flex border-b border-slate-800 space-x-6 text-sm font-medium">
+            <button 
+              onClick={() => setActiveTab("gate")}
+              class={`pb-3 border-b-2 flex items-center space-x-2 ${activeTab === "gate" ? "border-indigo-500 text-indigo-400" : "border-transparent text-slate-400 hover:text-slate-200"}`}>
+              <span>Human/MCP Gate</span>
+              {pendingFindings.length > 0 && (
+                <span class="bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full text-xs border border-amber-500/40">
+                  {pendingFindings.length} Pending
+                </span>
+              )}
+            </button>
+
+            <button 
+              onClick={() => setActiveTab("register")}
+              class={`pb-3 border-b-2 flex items-center space-x-2 ${activeTab === "register" ? "border-indigo-500 text-indigo-400" : "border-transparent text-slate-400 hover:text-slate-200"}`}>
+              <span>Project Register</span>
+            </button>
+          </div>
+
+          {/* TAB 1: HUMAN GATE */}
+          {activeTab === "gate" && (
+            <div class="space-y-6">
+              {pendingFindings.length > 0 ? (
+                <div>
+                  <div class="flex items-center justify-between mb-4">
+                    <div>
+                      <h2 class="text-lg font-semibold text-white">Pending Approval Gate ({pendingFindings.length})</h2>
+                      <p class="text-sm text-slate-400">Review and decide each contradiction detected across the document pile before committing to final deliverable.</p>
+                    </div>
+
+                    <div class="flex space-x-3">
+                      <button 
+                        onClick={() => handleBatchApprove(true)}
+                        class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition">
+                        Approve All
+                      </button>
+                      <button 
+                        onClick={() => handleBatchApprove(false)}
+                        class="bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition">
+                        Reject All
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="space-y-4">
+                    {pendingFindings.map((f) => (
+                      <div key={f.finding_id} class="bg-slate-800/90 border border-slate-700/80 rounded-xl p-5 shadow-lg space-y-4">
+                        <div class="flex items-start justify-between">
+                          <div class="flex items-center space-x-3">
+                            <span class={`px-2.5 py-0.5 rounded text-xs font-bold uppercase tracking-wide ${
+                              f.severity === "CRITICAL" ? "bg-rose-950 text-rose-300 border border-rose-600/50" :
+                              f.severity === "HIGH" ? "bg-amber-950 text-amber-300 border border-amber-600/50" :
+                              "bg-blue-950 text-blue-300 border border-blue-600/50"
+                            }`}>
+                              {f.severity}
+                            </span>
+                            <span class="text-xs font-mono text-slate-400">{f.finding_id}</span>
+                            <h3 class="text-base font-semibold text-white">{f.title}</h3>
+                          </div>
+                        </div>
+
+                        <p class="text-sm text-slate-300">{f.description}</p>
+
+                        {/* Citation Cards Side by Side */}
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                          {/* Source A */}
+                          <div class="bg-slate-900/80 rounded-lg p-3 border border-slate-700/50 space-y-1">
+                            <div class="font-semibold text-indigo-300 flex items-center justify-between">
+                              <span>Source A: {f.source_a.filename}</span>
+                              <span class="text-slate-500">{f.source_a.location}</span>
+                            </div>
+                            <p class="text-slate-300 italic font-mono bg-slate-950/60 p-2 rounded border border-slate-800/80">"{f.source_a.exact_quote}"</p>
+                          </div>
+
+                          {/* Source B */}
+                          {f.source_b && (
+                            <div class="bg-slate-900/80 rounded-lg p-3 border border-slate-700/50 space-y-1">
+                              <div class="font-semibold text-amber-300 flex items-center justify-between">
+                                <span>Source B: {f.source_b.filename}</span>
+                                <span class="text-slate-500">{f.source_b.location}</span>
+                              </div>
+                              <p class="text-slate-300 italic font-mono bg-slate-950/60 p-2 rounded border border-slate-800/80">"{f.source_b.exact_quote}"</p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Recommendation */}
+                        <div class="bg-indigo-950/40 border border-indigo-500/30 rounded-lg p-3 text-xs text-indigo-200">
+                          <strong class="text-indigo-400">System Recommendation:</strong> {f.recommendation}
+                        </div>
+
+                        {/* Feedback & Actions */}
+                        <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-slate-700/40">
+                          <input 
+                            type="text"
+                            placeholder="Optional feedback / reasoning for decision..."
+                            value={feedbackInputs[f.finding_id] || ""}
+                            onChange={(e) => setFeedbackInputs({ ...feedbackInputs, [f.finding_id]: e.target.value })}
+                            class="w-full sm:w-2/3 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                          />
+
+                          <div class="flex space-x-2 w-full sm:w-auto justify-end">
+                            <button 
+                              onClick={() => handleApprove(f.finding_id, true)}
+                              class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs px-4 py-2 rounded-lg transition">
+                              ✓ Approve
+                            </button>
+                            <button 
+                              onClick={() => handleApprove(f.finding_id, false)}
+                              class="bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs px-4 py-2 rounded-lg transition">
+                              ✕ Reject
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div class="bg-emerald-950/30 border border-emerald-500/30 rounded-xl p-8 text-center space-y-3">
+                  <div class="text-3xl">🎉</div>
+                  <h3 class="text-lg font-semibold text-emerald-300">Human/MCP Gate Cleared!</h3>
+                  <p class="text-sm text-slate-400">All findings have been reviewed and decided. Final project register deliverable is ready.</p>
+                </div>
+              )}
+
+              {/* Resolved Findings History */}
+              {resolvedFindings.length > 0 && (
+                <div class="pt-6 border-t border-slate-800">
+                  <h3 class="text-sm font-semibold text-slate-400 mb-3">Resolved Gate Decisions ({resolvedFindings.length})</h3>
+                  <div class="space-y-2 text-xs">
+                    {resolvedFindings.map(f => (
+                      <div key={f.finding_id} class="bg-slate-800/40 border border-slate-800 rounded-lg p-3 flex items-center justify-between">
+                        <div>
+                          <span class="font-semibold text-white">{f.finding_id}: {f.title}</span>
+                          {f.feedback && <span class="text-slate-400 ml-2">("{f.feedback}")</span>}
+                        </div>
+                        <span class={`px-2 py-0.5 rounded font-bold uppercase ${f.status === "APPROVED" ? "bg-emerald-950 text-emerald-400 border border-emerald-800" : "bg-rose-950 text-rose-400 border border-rose-800"}`}>
+                          {f.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 2: REGISTER */}
+          {activeTab === "register" && register && (
+            <div class="space-y-6">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h2 class="text-lg font-semibold text-white">Reconciled Project Register</h2>
+                  <p class="text-sm text-slate-400">Grounded single source of truth compiled across all 8 documents in the pile.</p>
+                </div>
+
+                <div class="text-xs text-slate-400 font-mono">
+                  Hash: {register.content_hash} • Version {register.version}
+                </div>
+              </div>
+
+              <div class="bg-slate-800/80 border border-slate-700/80 rounded-xl overflow-hidden">
+                <table class="w-full text-left text-xs">
+                  <thead class="bg-slate-900/80 text-slate-400 font-semibold border-b border-slate-700/60 uppercase">
+                    <tr>
+                      <th class="p-3">Entity Metric</th>
+                      <th class="p-3">Reconciled Value</th>
+                      <th class="p-3">Status</th>
+                      <th class="p-3">Primary Source</th>
+                      <th class="p-3">Audit Trail</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-800/80">
+                    {register.entries.map((e, idx) => (
+                      <tr key={idx} class="hover:bg-slate-800/50 transition">
+                        <td class="p-3 font-semibold text-white">{e.title}</td>
+                        <td class="p-3 font-mono text-indigo-300">{e.reconciled_value}</td>
+                        <td class="p-3">
+                          <span class={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            e.status === "CONTRADICTED" ? "bg-rose-950 text-rose-300 border border-rose-700/50" :
+                            e.status === "CORROBORATED" ? "bg-emerald-950 text-emerald-300 border border-emerald-700/50" :
+                            "bg-slate-700 text-slate-300"
+                          }`}>
+                            {e.status}
+                          </span>
+                        </td>
+                        <td class="p-3 text-slate-300">
+                          <div>{e.primary_citation.filename}</div>
+                          <div class="text-[10px] text-slate-500">{e.primary_citation.location}</div>
+                        </td>
+                        <td class="p-3 text-slate-400 text-[10px]">
+                          {e.history.length} source(s)
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

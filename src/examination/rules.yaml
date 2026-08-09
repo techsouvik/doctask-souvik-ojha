@@ -1,0 +1,35 @@
+rules:
+  - rule_id: R001
+    name: "Internal Arithmetic Verification"
+    check_type: "ARITHMETIC"
+    target_doc_type: "STATUS_REPORT"
+    description: "Stated summary totals must equal the sum of itemized cost line items."
+    severity: "HIGH"
+
+  - rule_id: R002
+    name: "Quantity Consistency Check"
+    check_type: "PRESENCE"
+    target_doc_type: "STATUS_REPORT"
+    description: "Quantities reported in section narratives must match figures in data tables."
+    severity: "MEDIUM"
+
+  - rule_id: R003
+    name: "Progress-Gated Milestone Billing"
+    check_type: "CROSS_REFERENCE"
+    target_doc_type: "INVOICE"
+    description: "Milestone invoices can only bill 100% when progress reports confirm full completion."
+    severity: "CRITICAL"
+
+  - rule_id: R004
+    name: "Contract Clause Verification"
+    check_type: "CONTRACT_MATCH"
+    target_doc_type: "CORRESPONDENCE"
+    description: "Penalty clauses cited in correspondence must match executed contract terms."
+    severity: "LOW"
+
+  - rule_id: R005
+    name: "Material Receipt Audit"
+    check_type: "CROSS_REFERENCE"
+    target_doc_type: "MATERIAL_RECEIPT"
+    description: "Receipt notes marking 100% complete delivery must align with quarterly progress reports."
+    severity: "MEDIUM"

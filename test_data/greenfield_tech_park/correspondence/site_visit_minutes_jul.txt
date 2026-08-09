@@ -1,0 +1,68 @@
+SITE VISIT MEETING MINUTES
+==========================
+
+Date: 22 July 2024
+Time: 11:00 AM to 1:30 PM
+Venue: Site Office, Greenfield Tech Park, Plot 14-B, Electronic City Phase 2, Bengaluru
+
+Attendees:
+  - Vikram Rao (Sr. Project Engineer, Meridian Infrastructures - Client)
+  - Rakesh Menon (Project Manager, Apex Construction - Contractor)
+  - Suresh Kumar (Stores In-charge, Apex Construction)
+  - Ranjit Bhalla (Site Supervisor, Apex Construction)
+  - Farida Ansari (Architect's Representative, Stanton & Partners)
+
+Minutes by: Vikram Rao, Meridian Infrastructures
+
+--------------------------------------------------------------------
+
+1. GENERAL PROGRESS
+   The site visit covered a full walkthrough of the structure up to the 8th floor
+   slab level. RCC column casting is progressing well. The general quality of
+   concrete finish was noted as satisfactory, with minor honeycombing observed at
+   two column locations on the 4th floor, which the Contractor agreed to rectify.
+
+2. STEEL DELIVERY STATUS
+   The Client raised concern about the steel delivery delay flagged in the Q2
+   status report. The Contractor's Stores In-charge (Suresh Kumar) confirmed that
+   approximately 80% of the structural steel against PO #APEX-PO-2024-029 has now
+   been received at site as of the visit date. The remaining 20% is expected by
+   the first week of August. The Client noted that the delay has already impacted
+   the beam erection schedule for floors 6-8 and requested a revised look-ahead
+   schedule within seven days.
+
+3. SCHEDULE
+   The Contractor confirmed that Phase 3 (Superstructure) is now targeted for
+   completion by 25 August 2024, approximately five days ahead of the contract
+   date of 31 August. The Client expressed cautious optimism but noted that this
+   depends on the remaining steel arriving on time.
+
+4. SAFETY
+   One minor incident recorded in June (finger injury). Corrective action
+   completed. The site safety audit conducted by the Client's team found the
+   overall safety arrangements acceptable. A recommendation was made to improve
+   edge protection on the 7th floor slab.
+
+5. MEP COORDINATION
+   MEP rough-in drawings were circulated for the 1st to 3rd floors. The
+   Contractor requested final approval from the Architect for the 4th floor
+   onwards drawings. Minor clash detection issues between HVAC duct routing and
+   structural beams were noted on the 5th floor.
+
+6. CLIENT OBSERVATIONS
+   The Client noted that progress is broadly on schedule but the steel supply
+   dependency remains the key risk. The Client requested weekly progress
+   photographs be shared every Monday.
+
+7. ACTION ITEMS
+   a. Contractor to submit revised look-ahead schedule by 29 July 2024.
+   b. Contractor to rectify honeycombing on 4th floor columns by 28 July.
+   c. Architect to approve MEP drawings for 4th floor onwards by 26 July.
+   d. Contractor to share weekly progress photos every Monday starting 29 July.
+
+--------------------------------------------------------------------
+Meeting closed at 1:30 PM.
+
+Signed:
+  Vikram Rao                    Rakesh Menon
+  Meridian Infrastructures      Apex Construction Ltd
