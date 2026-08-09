@@ -1,9 +1,12 @@
 """Comprehensive Multi-Worker Load & Stress Benchmark Engine for DocuMesh."""
 
+import sys
+import os
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+
 import time
 import asyncio
-import os
-import sys
 import statistics
 from typing import Dict, Any, List
 from fastapi.testclient import TestClient

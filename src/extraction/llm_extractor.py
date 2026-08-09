@@ -1,12 +1,12 @@
-"""LLM Structured Fact Extractor with Gemini & OpenAI support, Pydantic validation, & graceful fallback."""
+"""LLM Structured Fact Extractor supporting OpenAI, Custom Base URL, Anthropic Claude, & Gemini."""
 
-import json
 import os
 import uuid
 from typing import List, Optional, Any, Dict
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, Field
 
-from src.config import settings
+from src.llm.models import ModelProviderConfig, LLMProviderType
+from src.llm.factory import get_llm_instance
 from src.models.domain import DocumentMetadata, ExtractedFact, SourceCitation
 from src.extraction.normalizer import (
     normalize_currency, normalize_date, normalize_percentage, normalize_quantity
@@ -31,45 +31,29 @@ class LLMExtractionSchema(BaseModel):
     facts: List[ExtractedFactLLMItem] = Field(default_factory=list)
 
 
-async def extract_facts_llm_async(doc: DocumentMetadata) -> List[ExtractedFact]:
-    """Extract facts using LLM structured output (Gemini / OpenAI) with fallback to heuristic extractor."""
-    gemini_key = settings.gemini_api_key or settings.google_api_key or os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
-    openai_key = settings.openai_api_key or os.getenv("OPENAI_API_KEY", "")
+async def extract_facts_llm_async(doc: DocumentMetadata, provider_config: Optional[ModelProviderConfig] = None) -> List[ExtractedFact]:
+    """Extract facts using Multi-Provider LLM structured output with fallback to heuristic extractor."""
+    chat_model = get_llm_instance(provider_config)
 
-    if not gemini_key and not openai_key:
-        logger.info("llm_keys_missing_using_heuristic_extractor", filename=doc.filename)
+    if chat_model is None:
+        logger.info("llm_model_not_available_using_heuristic_extractor", filename=doc.filename)
         from src.extraction.extractor import extract_facts_heuristic
         return extract_facts_heuristic(doc)
 
     try:
         from langchain_core.prompts import ChatPromptTemplate
 
-        if gemini_key:
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            logger.info("using_gemini_llm_provider", filename=doc.filename, model=settings.default_gemini_model)
-            model = ChatGoogleGenerativeAI(
-                model=settings.default_gemini_model,
-                google_api_key=gemini_key,
-                temperature=0.0
-            ).with_structured_output(LLMExtractionSchema)
-        else:
-            from langchain_openai import ChatOpenAI
-            logger.info("using_openai_llm_provider", filename=doc.filename, model=settings.default_model)
-            model = ChatOpenAI(
-                model=settings.default_model,
-                api_key=SecretStr(openai_key),
-                temperature=0.0
-            ).with_structured_output(LLMExtractionSchema)
+        structured_model = chat_model.with_structured_output(LLMExtractionSchema)
 
         prompt = ChatPromptTemplate.from_messages([
             ("system",
-             "You are an expert construction document analyst. Extract all key facts from the document text.\n"
+             "You are an expert construction document analyst operating under zero-hallucination constraints.\n"
              "For EVERY fact you extract, you MUST provide an exact_quote containing verbatim text from the document.\n"
              "DO NOT hallucinate or summarize in exact_quote. Ground every fact strictly in the document text."),
             ("user", "Document Filename: {filename}\nDocument Type: {doc_type}\n\nText:\n{text}")
         ])
 
-        chain = prompt | model
+        chain = prompt | structured_model
 
         raw_result = await chain.ainvoke({
             "filename": doc.filename,
