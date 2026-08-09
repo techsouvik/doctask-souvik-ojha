@@ -1,12 +1,13 @@
-"""Projects API Router for workspace management, execution, timeline, & analytics."""
+"""Projects API Router for workspace management, execution, time-travel, timeline, & analytics."""
 
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from src.app.project_service import ProjectService, _ACTIVE_STATES
 from src.app.register_service import RegisterService
+from src.graph.time_travel import TimeTravelEngine
 from src.models.domain import TimelineEvent, RunCostReport, NodeUsage
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
@@ -15,6 +16,11 @@ router = APIRouter(prefix="/projects", tags=["Projects"])
 class CreateProjectRequest(BaseModel):
     project_name: str
     doc_folder: Optional[str] = "/Users/souvikojha/doctask-souvik-ojha/test_data/greenfield_tech_park"
+
+
+class RewindRequest(BaseModel):
+    target_node_name: str
+    state_overrides: Optional[Dict[str, Any]] = None
 
 
 @router.post("")
@@ -58,13 +64,34 @@ def get_status(project_id: str):
     }
 
 
+@router.get("/{project_id}/history")
+def get_time_travel_history(project_id: str):
+    """Get history of node checkpoints for LangGraph time travel."""
+    history = TimeTravelEngine.get_project_history(project_id)
+    return {"project_id": project_id, "checkpoint_history": history}
+
+
+@router.post("/{project_id}/rewind")
+def rewind_graph_state(project_id: str, req: RewindRequest):
+    """Rewind graph state to a prior node checkpoint (Time Travel)."""
+    try:
+        rewound_state = TimeTravelEngine.rewind_to_node(project_id, req.target_node_name, req.state_overrides)
+        return {
+            "project_id": project_id,
+            "status": "rewound",
+            "rewound_to_node": rewound_state.current_node,
+            "pipeline_status": rewound_state.status
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.get("/{project_id}/timeline")
 def get_project_timeline(project_id: str):
     """Get chronological project lineage timeline."""
     state = ProjectService.get_project_state(project_id)
     events: List[TimelineEvent] = []
 
-    # Map documents to timeline events
     timeline_map = [
         ("2024-01-08", "master_project_plan.docx", "CONTRACT_EXECUTED", "Master Project Plan signed (Value: Rs 12.5 cr, Handover: Dec 15 2024)", False, None),
         ("2024-04-05", "status_report_q1.pdf", "STATUS_REPORT_SUBMITTED", "Q1 Status Report submitted (Expenditure mismatch flagged)", True, "F-001"),
