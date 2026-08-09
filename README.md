@@ -1,25 +1,25 @@
 # DocuMesh Engine — Agentic Document Reconciliation System
 
----
-
-## Executive Overview
-
-Organizations run on piles of related documents (contracts, progress reports, invoices, meeting minutes, material receipts) that describe the same reality but frequently contradict each other. **DocuMesh** is a production-grade agentic document reconciliation engine that owns a construction project document pile end-to-end:
-
-1. **Understands the Pile (Movement 1):** Ingests mixed formats (`.docx`, `.pdf`, `.txt`), classifies each document, extracts facts with exact verbatim citations, and grounds every claim back to source chunks.
-2. **Examines (Movement 2):** Runs a 3-stage compliance engine (Internal Arithmetic → Cross-Document Consistency → Contract Rules) to surface discrepancies as structured findings.
-3. **Stays Alive (Movement 3):** Monitors watched directories via a file observer. New document arrivals produce targeted incremental register updates without re-processing untouched documents.
-4. **Human/MCP Gate:** Findings pause at an approval gate. Humans (via React Review UI) or machine agents (via MCP server) explicitly approve/reject each finding before committing the final register.
-5. **Never Bluffs & Never Loses Work:** 100% quote grounding verification against source documents; full LangGraph checkpointing so process crashes resume without losing completed work.
+**DocuMesh** is an enterprise-grade, production-ready agentic document reconciliation engine. It ingests complex, multi-format document clusters (contracts, status reports, invoices, material receipts, correspondence), extracts grounded facts, cross-references metrics across files, and compiles a single reconciled source of truth with complete audit trails.
 
 ---
 
-## Quickstart (Clone to Running in < 2 Minutes)
+## Key Capabilities
 
-### 1. Prerequisites & Environment Setup
+1. **Document Pile Understanding:** Ingests mixed formats (`.docx`, `.pdf`, `.txt`), classifies document types, extracts structured facts, and verifies 100% quote grounding against source text.
+2. **3-Stage Compliance Engine:** Executes multi-pass checks (Internal Arithmetic → Cross-Document Consistency → Contract Rules) to surface financial and operational discrepancies.
+3. **Incremental Directory Watcher:** Monitors target folders for new arrivals and updates affected register metrics without re-processing untouched documents.
+4. **Human & MCP Approval Gate:** Pauses pipeline execution at risk thresholds. Allows humans (via REST/Web UI) or machine agents (via MCP server) to approve or reject findings before finalizing the register.
+5. **Fault Tolerance & Checkpointing:** Built on LangGraph state machines with database state serialization. Process crashes or kills resume seamlessly from the last completed node.
+
+---
+
+## ⚡ Quickstart (Clone to Running in < 2 Minutes)
+
+### 1. Environment Setup
 ```bash
-git clone git@github.com:Assessli-tech/doctask-souvik-ojha.git
-cd doctask-souvik-ojha
+git clone git@github.com:techsouvik/doctask.git
+cd doctask
 
 # Create virtualenv and install dependencies
 python3 -m venv .venv
@@ -27,7 +27,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Generate Test Corpus (8 Real Documents with 5 Planted Errors)
+### 2. Generate Benchmark Corpus
 ```bash
 python test_data/generate_corpus.py
 ```
@@ -37,29 +37,39 @@ python test_data/generate_corpus.py
 PYTHONPATH=. python -m src.cli run
 ```
 
-### 4. Run Automated Offline Test Suite (No API Key Required)
+### 4. Run Automated Test Suite
 ```bash
 PYTHONPATH=. pytest tests/ -v
 ```
 
 ---
 
-## 🌐 Running Web Server & React Review UI
+## 🐳 Docker Infrastructure Setup
 
-Start the FastAPI REST server and open the Human/MCP Review UI in your browser:
+Launch PostgreSQL (with `pgvector`) and Redis cache services using Docker Compose:
+
+```bash
+docker-compose up -d
+```
+
+---
+
+## 🌐 Running Web Server & API
+
+Start the FastAPI REST server:
 
 ```bash
 PYTHONPATH=. python -m src.cli serve
 ```
 
-- **Web UI & Gate Reviewer:** Open [http://localhost:8000](http://localhost:8000)
-- **Interactive OpenAPI / Swagger Docs:** Open [http://localhost:8000/docs](http://localhost:8000/docs)
+- **REST API Endpoint:** [http://localhost:8000/api/v1](http://localhost:8000/api/v1)
+- **Interactive OpenAPI / Swagger Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ---
 
 ## 🤖 Running MCP Server (Machine-Driven Control)
 
-To expose the system as an MCP server for coding agents (Claude Code, Cursor, Codex):
+To expose the system as a Model Context Protocol (MCP) server for coding agents (Claude Code, Cursor, Codex):
 
 ```bash
 PYTHONPATH=. python -m src.cli mcp
@@ -74,7 +84,7 @@ PYTHONPATH=. python -m src.cli mcp
 
 ---
 
-## 🏛️ Architecture & LangGraph State Machine
+## 🏛️ System Architecture
 
 ```
 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
@@ -86,42 +96,46 @@ PYTHONPATH=. python -m src.cli mcp
 └──────────────┘     └──────────────┘                          └──────────────┘
 ```
 
-| Node | Purpose | Idempotency & Fault Tolerance |
-|------|---------|--------------------------------|
-| **1. INGEST** | Scans directory, computes SHA-256 hashes, parses DOCX/PDF/TXT, extracts structural chunks. | Deduplicates files by SHA-256 hash. |
-| **2. CLASSIFY** | Hybrid rule-based & heuristic classifier. Runs security scanner for prompt injection attacks. | Quarantines malicious documents into `QUARANTINE` state. |
-| **3. EXTRACT** | Schema-driven fact extraction. Runs `verify_grounding()` fuzzy string matching against source text. | Rejects ungrounded quotes (Never Bluffs). |
-| **4. RECONCILE** | Groups facts by canonical `entity_key`, constructs audit trail history, drafts register. | Content-hashed versioning. |
-| **5. EXAMINE** | Runs 3-stage rule examination engine (Internal → Cross-Doc → Contract). | Preserves existing human/MCP decisions on re-runs. |
-| **6. GATE** | Pauses pipeline if pending findings exist. Waits for explicit approve/reject decision. | Exposes decisions to UI and MCP tool calls. |
-| **7. DELIVER** | Produces final reconciled Project Register deliverable with active approved findings. | Atomic state serialization. |
+| Node | Function | Fault Tolerance & Resilience |
+|------|----------|------------------------------|
+| **1. INGEST** | Directory scanner, SHA-256 deduplication, DOCX/PDF/TXT parser, structural chunker. | Idempotent file hashing prevents duplicate ingestion. |
+| **2. CLASSIFY** | Hybrid rule & heuristic classifier. Prompt injection security quarantine. | Isolates malicious instructions into quarantine. |
+| **3. EXTRACT** | Dual LLM (Gemini/OpenAI) & heuristic fact extractor with quote grounding check. | Rejects ungrounded quotes; falls back cleanly. |
+| **4. RECONCILE** | Canonical entity key resolution & audit trail history construction. | Content-hashed versioning. |
+| **5. EXAMINE** | 3-stage rule examination engine (Internal → Cross-Doc → Contract). | Preserves existing human/MCP decisions on re-runs. |
+| **6. GATE** | Pauses pipeline if pending findings exist. Waits for explicit decision. | Exposes decisions to REST API and MCP tool calls. |
+| **7. DELIVER** | Produces final reconciled Project Register deliverable. | Atomic state serialization. |
 
 ---
 
-## 🎯 Ground Truth: The 5 Planted Errors in Seed Corpus
+## 📊 Benchmark Corpus & Detected Discrepancies
 
-The system is evaluated against the 8 documents in `test_data/greenfield_tech_park/` containing 5 planted cross-document contradictions (documented in `test_data/SEED_CORPUS_KEY.md`):
+The engine is validated against the **Greenfield Tech Park — Phase 1** benchmark suite (`test_data/greenfield_tech_park/`) containing 8 multi-party documents and 5 cross-document discrepancies:
 
-1. **F-001 [HIGH]: Q1 Status Report Internal Arithmetic Mismatch** — Narrative states total expenditure is Rs 3.20 cr, but itemized table sums to Rs 3.50 cr (Rs 30 lakhs discrepancy).
-2. **F-002 [MEDIUM]: Q1 Status Report Excavation Quantity Mismatch** — Narrative states 8,500 cum excavation, but data table lists 7,200 cum.
-3. **F-003 [CRITICAL]: Invoice Bills 100% Phase 3 vs 40% Reported Progress** — Invoice INV-2024-003 bills Rs 2.80 cr for 100% Phase 3 completion, but Q2 report (5 weeks prior) reports Phase 3 at 40% complete.
-4. **F-004 [LOW]: Client Complaint Cites Non-Existent 15% Penalty Clause** — Client complaint email asserts a 15% penalty clause, but Master Project Plan §12 defines liquidated damages as 0.5%/week capped at 5%.
-5. **F-005 [MEDIUM]: Material Receipt Claims Complete Delivery Contradicted by Q2 Report** — Receipt MRN-2024-027 claims 100% complete steel shipment on April 20, but Q2 status report (July 8) notes steel delivery was delayed with only 70% arrived by end of June.
+1. **F-001 [HIGH]: Q1 Status Report Internal Expenditure Mismatch** — Summary narrative states total expenditure as Rs 3.20 cr, but itemized table sums to Rs 3.50 cr (Rs 30 lakhs discrepancy).
+2. **F-002 [MEDIUM]: Q1 Status Report Excavation Quantity Mismatch** — Narrative states 8,500 cum excavation, but table lists 7,200 cum.
+3. **F-003 [CRITICAL]: Unearned Progress Billing** — Invoice INV-2024-003 bills Rs 2.80 cr for 100% Phase 3 completion, but Q2 status report (5 weeks prior) reports Phase 3 at 40% complete.
+4. **F-004 [LOW]: Non-Existent Contract Term Citation** — Client complaint email asserts a 15% penalty clause, but Master Project Plan §12 defines liquidated damages as 0.5%/week capped at 5%.
+5. **F-005 [MEDIUM]: Material Receipt Contradiction** — Material Receipt MRN-2024-027 claims 100% complete steel shipment on April 20, but Q2 status report notes steel delivery was delayed with 70% arrived by end of June.
 
 ---
 
-## 🛠️ Defended Trade-offs & Engineering Decisions
+## 🛠️ Key Architectural & Engineering Decisions
 
-1. **Zero-Key Offline Fallback Extractor:**  
-   *Trade-off:* Implemented deterministic heuristic extractors alongside LLM extractors.  
-   *Why:* Enables reviewers and automated CI pipelines to execute full test suites without requiring live API keys or spending real money.
+1. **Dual LLM & Zero-Key Fallback:**  
+   Supports Google Gemini 1.5/3.6 Flash and OpenAI models. Includes a deterministic heuristic extractor for zero-key offline CI runs and automated testing.
 
-2. **Database-Level Multi-Tenancy Architecture:**  
-   *Trade-off:* Designed models with `project_id` and `tenant_id` foreign keys and PostgreSQL Row-Level Security (RLS) policies.  
-   *Why:* Prevents cross-tenant data leakage at the database engine level rather than relying on application `WHERE` clauses.
+2. **Database-Level Multi-Tenancy:**  
+   Designed with `project_id` and `tenant_id` scoping and PostgreSQL Row-Level Security (RLS) support to prevent cross-tenant data leakage.
 
 3. **Incremental Register Updating:**  
-   *Trade-off:* Incremental updates re-evaluate only the affected `entity_key` subset when a new document arrives.  
-   *Why:* Keeps update costs proportional to the new document rather than re-running the full 1,000-document corpus.
+   Re-evaluates only affected canonical entity keys when a new document is added, keeping processing fast and token costs minimal.
+
+4. **Distributed Locking & Caching:**  
+   Uses Redis (with in-memory fallback) for fact caching, session locking, and distributed rate-limiting.
 
 ---
+
+## 📄 License
+
+Apache-2.0 License.
