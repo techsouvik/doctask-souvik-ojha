@@ -11,8 +11,6 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
   <!-- Babel for JSX -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <!-- Lucide Icons -->
-  <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body class="bg-slate-900 text-slate-100 font-sans antialiased min-h-screen">
 
@@ -28,7 +26,8 @@
       const [statusData, setStatusData] = useState(null);
       const [findings, setFindings] = useState([]);
       const [register, setRegister] = useState(null);
-      const [activeTab, setActiveTab] = useState("gate"); // gate, register, docs
+      const [graphData, setGraphData] = useState(null);
+      const [activeTab, setActiveTab] = useState("gate"); // gate, register, graph, rules
       const [loading, setLoading] = useState(false);
       const [feedbackInputs, setFeedbackInputs] = useState({});
 
@@ -64,6 +63,16 @@
         }
       };
 
+      const fetchGraph = async () => {
+        try {
+          const res = await fetch(`${API_BASE}/projects/${PROJECT_ID}/graph`);
+          const data = await res.json();
+          setGraphData(data);
+        } catch (e) {
+          console.error("Fetch graph error:", e);
+        }
+      };
+
       const triggerRun = async () => {
         setLoading(true);
         try {
@@ -71,6 +80,7 @@
           await fetchStatus();
           await fetchFindings();
           await fetchRegister();
+          await fetchGraph();
         } catch (e) {
           console.error("Trigger run error:", e);
         } finally {
@@ -89,6 +99,7 @@
           await fetchStatus();
           await fetchFindings();
           await fetchRegister();
+          await fetchGraph();
         } catch (e) {
           console.error("Approve error:", e);
         }
@@ -104,6 +115,7 @@
           await fetchStatus();
           await fetchFindings();
           await fetchRegister();
+          await fetchGraph();
         } catch (e) {
           console.error("Batch approve error:", e);
         }
@@ -129,10 +141,17 @@
             </div>
 
             <div class="flex items-center space-x-3">
+              <a 
+                href={`${API_BASE}/projects/${PROJECT_ID}/export-report`} 
+                target="_blank"
+                class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3.5 py-2 rounded-lg font-medium text-xs transition flex items-center space-x-2">
+                <span>📄 Export Report</span>
+              </a>
+
               <button 
                 onClick={triggerRun}
                 disabled={loading}
-                class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-medium text-sm transition flex items-center space-x-2 disabled:opacity-50">
+                class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-medium text-xs transition flex items-center space-x-2 disabled:opacity-50">
                 <span>{loading ? "Processing..." : "Re-Run Pipeline"}</span>
               </button>
             </div>
@@ -180,6 +199,12 @@
               onClick={() => setActiveTab("register")}
               class={`pb-3 border-b-2 flex items-center space-x-2 ${activeTab === "register" ? "border-indigo-500 text-indigo-400" : "border-transparent text-slate-400 hover:text-slate-200"}`}>
               <span>Project Register</span>
+            </button>
+
+            <button 
+              onClick={() => setActiveTab("graph")}
+              class={`pb-3 border-b-2 flex items-center space-x-2 ${activeTab === "graph" ? "border-indigo-500 text-indigo-400" : "border-transparent text-slate-400 hover:text-slate-200"}`}>
+              <span>Knowledge Graph</span>
             </button>
           </div>
 
@@ -362,6 +387,44 @@
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: KNOWLEDGE GRAPH */}
+          {activeTab === "graph" && graphData && (
+            <div class="space-y-6">
+              <div>
+                <h2 class="text-lg font-semibold text-white">Document Conflict &amp; Citation Network</h2>
+                <p class="text-sm text-slate-400">Visual mapping connecting document nodes to detected cross-document findings.</p>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-slate-800/80 border border-slate-700/80 rounded-xl p-4 space-y-3">
+                  <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Document Nodes ({graphData.nodes.filter(n => n.type === "DOCUMENT").length})</h3>
+                  <div class="space-y-2">
+                    {graphData.nodes.filter(n => n.type === "DOCUMENT").map(n => (
+                      <div key={n.id} class="bg-slate-900/80 p-2.5 rounded-lg border border-slate-700/50 text-xs flex items-center justify-between">
+                        <span class="font-mono text-indigo-300">{n.label}</span>
+                        <span class="bg-slate-800 text-slate-400 px-2 py-0.5 rounded text-[10px] font-bold">{n.doc_type}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div class="bg-slate-800/80 border border-slate-700/80 rounded-xl p-4 space-y-3">
+                  <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Conflict Edges &amp; Findings ({graphData.nodes.filter(n => n.type === "FINDING").length})</h3>
+                  <div class="space-y-2">
+                    {graphData.nodes.filter(n => n.type === "FINDING").map(n => (
+                      <div key={n.id} class="bg-rose-950/30 p-2.5 rounded-lg border border-rose-700/40 text-xs space-y-1">
+                        <div class="flex items-center justify-between">
+                          <span class="font-semibold text-rose-300">{n.id}: {n.label}</span>
+                          <span class="bg-rose-900 text-rose-200 px-2 py-0.5 rounded text-[10px] font-bold">{n.severity}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           )}

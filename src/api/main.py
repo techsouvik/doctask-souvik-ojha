@@ -3,10 +3,10 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 
 from src.api.router import router as api_router
+from src.api.middleware import TenantContextMiddleware
 from src.config import settings
 
 app = FastAPI(
@@ -24,11 +24,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Multi-Tenancy Middleware
+app.add_middleware(TenantContextMiddleware)
+
 # Include API Router
 app.include_router(api_router)
 
 # UI Directory
 UI_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "ui")
+
 
 @app.get("/", response_class=HTMLResponse)
 def root():

@@ -56,7 +56,7 @@ class DocuMeshCache:
         """Set value in Redis or Memory cache."""
         if self.redis_client:
             try:
-                self.redis_client.setex(key, ttl_seconds, json.dumps(value, default=str))
+                self.redis_client.set(key, json.dumps(value, default=str), ex=ttl_seconds)
                 return
             except Exception as e:
                 logger.warning("redis_set_error_fallback_memory", key=key, error=str(e))
