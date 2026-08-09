@@ -1,7 +1,9 @@
 """Entity Resolver: Groups extracted facts by canonical entity_key across documents."""
 
+import json
+import hashlib
 from typing import List, Dict
-from src.models.domain import ExtractedFact, ProjectRegisterEntry, SourceCitation
+from src.models.domain import ExtractedFact, ProjectRegisterEntry, ProjectRegister, SourceCitation
 
 
 def group_facts_by_entity(facts: List[ExtractedFact]) -> Dict[str, List[ExtractedFact]]:
@@ -59,3 +61,15 @@ def resolve_entity_history(facts: List[ExtractedFact]) -> List[ProjectRegisterEn
         ))
 
     return entries
+
+
+def reconcile_facts(project_id: str, project_name: str, facts: List[ExtractedFact]) -> ProjectRegister:
+    """Reconcile facts and compile ProjectRegister object."""
+    entries = resolve_entity_history(facts)
+    content_hash = hashlib.sha256(json.dumps([e.model_dump() for e in entries], default=str).encode()).hexdigest()[:12]
+    return ProjectRegister(
+        project_id=project_id,
+        project_name=project_name,
+        content_hash=content_hash,
+        entries=entries
+    )

@@ -65,5 +65,7 @@ def test_human_gate_approval_flow():
     final_dict = graph.invoke(state)
 
     assert final_dict["status"] == "COMPLETED"
-    assert final_dict["register"] is not None
-    assert final_dict["register"]["active_conflicts_count"] == 2
+    reg = final_dict["register"]
+    assert reg is not None
+    active_cnt = reg.active_conflicts_count if hasattr(reg, "active_conflicts_count") else reg["active_conflicts_count"]
+    assert active_cnt == 2

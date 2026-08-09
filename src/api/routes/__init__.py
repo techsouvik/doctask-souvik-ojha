@@ -7,6 +7,7 @@ from src.api.routes.findings import router as findings_router
 from src.api.routes.sessions import router as sessions_router
 from src.api.routes.search import router as search_router
 from src.api.routes.artifacts import router as artifacts_router
+from src.api.routes.skills import router as skills_router
 
 all_routers = [
     health_router,
@@ -16,4 +17,5 @@ all_routers = [
     sessions_router,
     search_router,
     artifacts_router,
+    skills_router,
 ]

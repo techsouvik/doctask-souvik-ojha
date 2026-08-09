@@ -1,36 +1,31 @@
-"""Rule Examination Engine: 3-stage compliance & contract rule checker (Movement 2)."""
+"""Rule Examination Engine: 3-stage compliance checker + dynamic user-added skills evaluator."""
 
 import os
 import yaml
 from typing import List, Dict, Any
-from src.models.domain import ExtractedFact, Finding, Rule, Severity, DocumentType
+from src.models.domain import ExtractedFact, Finding, DocumentMetadata
 from src.reconciliation.detector import detect_conflicts
+from src.skills.registry import global_skill_registry
+from src.logging_config import get_logger
+
+logger = get_logger("documesh.examination")
 
 
-def load_default_rules() -> List[Rule]:
-    """Load system rules from YAML definition."""
-    rules_path = os.path.join(os.path.dirname(__file__), "rules.yaml")
-    if not os.path.exists(rules_path):
-        return []
+def run_rule_examination(facts: List[ExtractedFact], docs: List[DocumentMetadata]) -> List[Finding]:
+    """Run Movement 2 Rule Examination (Internal -> Cross-Doc -> Contract) + User Skills."""
+    logger.info("running_rule_examination", facts_count=len(facts), docs_count=len(docs))
 
-    with open(rules_path, "r") as f:
-        data = yaml.safe_load(f)
-
-    rules = []
-    for r in data.get("rules", []):
-        rules.append(Rule(
-            rule_id=r["rule_id"],
-            name=r["name"],
-            check_type=r["check_type"],
-            target_doc_type=DocumentType(r["target_doc_type"]),
-            description=r["description"],
-            severity=Severity(r["severity"])
-        ))
-    return rules
-
-
-def run_examination_pipeline(facts: List[ExtractedFact]) -> List[Finding]:
-    """Execute 3-stage examination pipeline across facts."""
-    # Run conflict detector (executes Stage 1, Stage 2, and Stage 3 checks)
+    # 1. Base detector conflicts (planted errors & core contract rules)
     findings = detect_conflicts(facts)
+
+    # 2. Dynamic User-Added Skills evaluation
+    skill_findings = global_skill_registry.evaluate_skills_on_facts(facts, docs)
+    findings.extend(skill_findings)
+
+    logger.info("rule_examination_complete", static_findings_count=len(findings) - len(skill_findings), skill_findings_count=len(skill_findings), total_findings=len(findings))
+
     return findings
+
+
+# Alias for backward compatibility
+run_examination_pipeline = run_rule_examination

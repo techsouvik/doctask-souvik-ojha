@@ -1,83 +1,26 @@
 """SQLAlchemy Database Layer with Session Persistence & Checkpointing."""
 
 import json
+import uuid
 from datetime import datetime
 from typing import Optional, Dict, Any
-from sqlalchemy import Column, String, Float, Boolean, Text, DateTime, ForeignKey, create_engine
-from sqlalchemy.orm import declarative_base, sessionmaker, Session
+from sqlalchemy import Column, String, Float, Integer, Text, DateTime, create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
+
+from src.config import settings
 
 Base = declarative_base()
 
 
-class DBProject(Base):
-    __tablename__ = "projects"
-
-    id = Column(String, primary_key=True)
-    tenant_id = Column(String, nullable=False, default="tenant_default")
-    name = Column(String, nullable=False)
-    document_root = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-
-class DBDocument(Base):
-    __tablename__ = "documents"
-
-    id = Column(String, primary_key=True)
-    project_id = Column(String, ForeignKey("projects.id"), nullable=False, index=True)
-    filename = Column(String, nullable=False)
-    filepath = Column(String, nullable=False)
-    format = Column(String, nullable=False)
-    checksum = Column(String, nullable=False, index=True)
-    doc_type = Column(String, nullable=False)
-    quarantined = Column(Boolean, default=False)
-    quarantine_reason = Column(Text, nullable=True)
-    ingested_at = Column(DateTime, default=datetime.utcnow)
-    extracted_text = Column(Text, nullable=True)
-
-
-class DBFact(Base):
-    __tablename__ = "facts"
-
-    id = Column(String, primary_key=True)
-    project_id = Column(String, ForeignKey("projects.id"), nullable=False, index=True)
-    doc_id = Column(String, ForeignKey("documents.id"), nullable=False, index=True)
-    entity_type = Column(String, nullable=False)
-    entity_key = Column(String, nullable=False, index=True)
-    attribute = Column(String, nullable=False)
-    raw_value = Column(String, nullable=False)
-    normalized_value = Column(Text, nullable=True)
-    unit = Column(String, nullable=True)
-    confidence = Column(Float, default=1.0)
-    grounded = Column(Boolean, default=True)
-    citation_json = Column(Text, nullable=False)
-    extracted_at = Column(DateTime, default=datetime.utcnow)
-
-
-class DBFinding(Base):
-    __tablename__ = "findings"
-
-    id = Column(String, primary_key=True)
-    project_id = Column(String, ForeignKey("projects.id"), nullable=False, index=True)
-    finding_type = Column(String, nullable=False)
-    severity = Column(String, nullable=False)
-    title = Column(String, nullable=False)
-    description = Column(Text, nullable=False)
-    source_a_json = Column(Text, nullable=False)
-    source_b_json = Column(Text, nullable=True)
-    recommendation = Column(Text, nullable=False)
-    status = Column(String, default="PRESENTED", index=True)
-    feedback = Column(Text, nullable=True)
-    decided_at = Column(DateTime, nullable=True)
-    decided_by = Column(String, nullable=True)
-
-
-class DBCheckpoint(Base):
+class CheckpointModel(Base):
+    """Database model for graph node state checkpoints."""
     __tablename__ = "checkpoints"
 
-    id = Column(String, primary_key=True)
-    project_id = Column(String, ForeignKey("projects.id"), nullable=False, index=True)
-    node_name = Column(String, nullable=False)
-    state_json = Column(Text, nullable=False)
+    seq_id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String(128), index=True)
+    project_id = Column(String(64), index=True)
+    node_name = Column(String(64))
+    state_json = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -85,23 +28,30 @@ _ENGINE = None
 _SESSION_FACTORY = None
 
 
-def get_db_session(db_path: str = "documesh.db") -> Session:
-    """Get database session for SQLite."""
+def get_db_engine():
     global _ENGINE, _SESSION_FACTORY
     if _ENGINE is None:
-        _ENGINE = create_engine(f"sqlite:///{db_path}", echo=False)
+        db_url = settings.database_url
+        if db_url.startswith("sqlite+aiosqlite"):
+            db_url = db_url.replace("sqlite+aiosqlite", "sqlite")
+
+        _ENGINE = create_engine(db_url, echo=False)
         Base.metadata.create_all(_ENGINE)
         _SESSION_FACTORY = sessionmaker(bind=_ENGINE)
-    assert _SESSION_FACTORY is not None
-    return _SESSION_FACTORY()
+
+    return _ENGINE
 
 
-def save_checkpoint(project_id: str, node_name: str, state_data: Dict[str, Any], db_path: str = "documesh.db"):
-    """Persist pipeline checkpoint state to database."""
-    session = get_db_session(db_path)
+def save_checkpoint(project_id: str, node_name: str, state_data: Dict[str, Any]) -> str:
+    """Save graph node checkpoint to database."""
+    get_db_engine()
+    if _SESSION_FACTORY is None:
+        return ""
+
+    session = _SESSION_FACTORY()
     try:
-        cp_id = f"chk_{project_id}_{node_name}_{int(datetime.utcnow().timestamp())}"
-        cp = DBCheckpoint(
+        cp_id = f"chk_{project_id}_{node_name}_{uuid.uuid4().hex[:8]}"
+        cp = CheckpointModel(
             id=cp_id,
             project_id=project_id,
             node_name=node_name,
@@ -110,24 +60,29 @@ def save_checkpoint(project_id: str, node_name: str, state_data: Dict[str, Any],
         )
         session.add(cp)
         session.commit()
+        return cp_id
     except Exception as e:
         session.rollback()
         print(f"Error saving checkpoint: {e}")
+        return ""
     finally:
         session.close()
 
 
-def load_latest_checkpoint(project_id: str, db_path: str = "documesh.db") -> Optional[Dict[str, Any]]:
-    """Load latest checkpoint state for a project."""
-    session = get_db_session(db_path)
+def load_latest_checkpoint(project_id: str) -> Optional[Dict[str, Any]]:
+    """Load latest checkpoint state for a project ordered by true sequence ID."""
+    get_db_engine()
+    if _SESSION_FACTORY is None:
+        return None
+
+    session = _SESSION_FACTORY()
     try:
-        cp = session.query(DBCheckpoint).filter_by(project_id=project_id).order_by(DBCheckpoint.created_at.desc()).first()
-        if cp is not None:
-            raw_json = getattr(cp, "state_json", None)
-            if raw_json:
-                return json.loads(str(raw_json))
+        cp = session.query(CheckpointModel).filter(CheckpointModel.project_id == project_id).order_by(CheckpointModel.seq_id.desc()).first()
+        if cp is not None and cp.state_json is not None:
+            return json.loads(str(cp.state_json))
+        return None
     except Exception as e:
         print(f"Error loading checkpoint: {e}")
+        return None
     finally:
         session.close()
-    return None

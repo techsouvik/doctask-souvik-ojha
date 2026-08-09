@@ -19,20 +19,16 @@ def compute_sha256(filepath: str) -> str:
     return hasher.hexdigest()
 
 
-def wait_for_file_settled(filepath: str, timeout_sec: float = 3.0, check_interval: float = 0.5) -> bool:
+def wait_for_file_settled(filepath: str, timeout_sec: float = 1.0) -> bool:
     """Ensure a file is completely written before reading."""
-    start_time = time.time()
-    last_size = -1
+    if not os.path.exists(filepath):
+        return False
 
-    while time.time() - start_time < timeout_sec:
-        if not os.path.exists(filepath):
-            return False
-        current_size = os.path.getsize(filepath)
-        if current_size > 0 and current_size == last_size:
-            return True
-        last_size = current_size
-        time.sleep(check_interval)
+    size = os.path.getsize(filepath)
+    if size > 0:
+        return True
 
+    time.sleep(0.1)
     return os.path.exists(filepath) and os.path.getsize(filepath) > 0
 
 

@@ -65,6 +65,14 @@ class DocuMeshCache:
         self._memory_cache[key] = value
         self._memory_cache_expiry[key] = time.time() + ttl_seconds
 
+    def get_cached_fact(self, checksum: str) -> Optional[Any]:
+        """Get cached facts by document checksum."""
+        return self.get(f"fact:{checksum}")
+
+    def set_cached_fact(self, checksum: str, facts: Any, ttl_seconds: int = 86400):
+        """Cache facts by document checksum."""
+        self.set(f"fact:{checksum}", facts, ttl_seconds)
+
     def acquire_lock(self, lock_key: str, ttl_seconds: int = 30) -> bool:
         """Acquire a distributed lock."""
         full_key = f"lock:{lock_key}"
