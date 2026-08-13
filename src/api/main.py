@@ -1,7 +1,7 @@
 """FastAPI Main Server Application for DocuMesh."""
 
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
@@ -27,9 +27,12 @@ app.add_middleware(
 # Multi-Tenancy Middleware
 app.add_middleware(TenantContextMiddleware)
 
-# Include All Domain Routers under /api/v1
+# Group All Domain Routers under /api/v1
+v1_router = APIRouter(prefix="/api/v1")
 for r in all_routers:
-    app.include_router(r, prefix="/api/v1")
+    v1_router.include_router(r)
+
+app.include_router(v1_router)
 
 # UI Directory
 UI_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "ui")
