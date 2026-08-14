@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DocuMesh Engine — AI Document Audit & Reconciliation</title>
+  <title>DocuMesh AI — Conversational Document Reconciliation Engine</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- FontAwesome Icons CDN -->
@@ -19,10 +19,10 @@
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
-    .glass-card {
-      background: rgba(30, 41, 59, 0.7);
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
     }
   </style>
 </head>
@@ -30,477 +30,236 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useRef } = React;
 
     function App() {
-      const [projectId, setProjectId] = useState("proj_greenfield_tech_park");
-      const [pipelineStatus, setPipelineStatus] = useState("AWAITING_HUMAN_GATE");
-      const [currentNode, setCurrentNode] = useState("GATE");
-      const [documents, setDocuments] = useState([]);
-      const [findings, setFindings] = useState([]);
-      const [register, setRegister] = useState(null);
+      const [projectId] = useState("proj_greenfield_tech_park");
+      const [treeId] = useState("chat_session_main");
       const [chatMessages, setChatMessages] = useState([
-        { role: "assistant", content: "Hello! I am DocuMesh AI. You can ask me any question about the Greenfield Tech Park contracts, invoices, status reports, or receipts!" }
+        {
+          role: "assistant",
+          content: "Hello! I am **DocuMesh AI**, your agentic document reconciliation assistant powered by LangGraph.\n\nI own the **Greenfield Tech Park** document pile (contracts, status reports, invoices, material receipts, correspondence).\n\nHow can I help you today?",
+          action_payload: null
+        }
       ]);
       const [chatInput, setChatInput] = useState("");
       const [loading, setLoading] = useState(false);
-      const [activeTab, setActiveTab] = useState("findings"); // "findings", "register", "graph", "chat"
+      const messagesEndRef = useRef(null);
 
-      // Fetch status on load
       useEffect(() => {
-        fetchStatus();
-      }, []);
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, [chatMessages, loading]);
 
-      const fetchStatus = async () => {
-        try {
-          const res = await fetch(`/api/v1/projects/${projectId}/status`);
-          if (res.ok) {
-            const data = await res.json();
-            setPipelineStatus(data.status);
-            setCurrentNode(data.current_node);
-          }
-          fetchFindings();
-          fetchDocuments();
-        } catch (e) {
-          console.error("Status fetch error", e);
-        }
-      };
+      const sendMessage = async (textToSend) => {
+        const query = textToSend || chatInput;
+        if (!query.trim()) return;
 
-      const fetchDocuments = async () => {
-        try {
-          const res = await fetch(`/api/v1/projects/${projectId}/documents`);
-          if (res.ok) {
-            const data = await res.json();
-            setDocuments(data.documents || []);
-          }
-        } catch (e) {
-          console.error("Docs fetch error", e);
-        }
-      };
-
-      const fetchFindings = async () => {
-        try {
-          const res = await fetch(`/api/v1/projects/${projectId}/findings`);
-          if (res.ok) {
-            const data = await res.json();
-            setFindings(data.findings || []);
-          }
-        } catch (e) {
-          console.error("Findings fetch error", e);
-        }
-      };
-
-      const triggerRun = async () => {
-        setLoading(true);
-        try {
-          const res = await fetch(`/api/v1/projects/${projectId}/run`, { method: "POST" });
-          if (res.ok) {
-            const data = await res.json();
-            setPipelineStatus(data.status);
-            setCurrentNode(data.current_node);
-            fetchFindings();
-          }
-        } catch (e) {
-          console.error("Run error", e);
-        } finally {
-          setLoading(false);
-        }
-      };
-
-      const handleDecision = async (findingId, approved) => {
-        try {
-          const res = await fetch(`/api/v1/projects/${projectId}/findings/approve`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ finding_id: findingId, approved })
-          });
-          if (res.ok) {
-            fetchFindings();
-          }
-        } catch (e) {
-          console.error("Decision error", e);
-        }
-      };
-
-      const handleBatchApprove = async () => {
-        setLoading(true);
-        try {
-          const res = await fetch(`/api/v1/projects/${projectId}/findings/batch-approve`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ approved_all: true })
-          });
-          if (res.ok) {
-            const data = await res.json();
-            setPipelineStatus(data.status);
-            fetchFindings();
-            fetchRegister();
-            setActiveTab("register");
-          }
-        } catch (e) {
-          console.error("Batch approve error", e);
-        } finally {
-          setLoading(false);
-        }
-      };
-
-      const fetchRegister = async () => {
-        try {
-          const res = await fetch(`/api/v1/projects/${projectId}/register`);
-          if (res.ok) {
-            const data = await res.json();
-            setRegister(data);
-          }
-        } catch (e) {
-          console.error("Register fetch error", e);
-        }
-      };
-
-      const sendChatMessage = async (e) => {
-        e.preventDefault();
-        if (!chatInput.trim()) return;
-
-        const userMsg = chatInput;
         setChatInput("");
-        setChatMessages(prev => [...prev, { role: "user", content: userMsg }]);
+        setChatMessages(prev => [...prev, { role: "user", content: query }]);
+        setLoading(true);
 
         try {
-          const res = await fetch(`/api/v1/projects/${projectId}/sessions/ui_session/messages`, {
+          const res = await fetch(`/api/v1/projects/${projectId}/sessions/${treeId}/messages`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ content: userMsg })
+            body: JSON.stringify({ content: query })
           });
+
           if (res.ok) {
             const data = await res.json();
             setChatMessages(prev => [...prev, {
               role: "assistant",
               content: data.assistant_node.content,
-              citations: data.citations
+              action_payload: data.action_payload
             }]);
           }
         } catch (e) {
-          console.error("Chat error", e);
+          console.error("Chat Error", e);
+        } finally {
+          setLoading(false);
         }
       };
 
-      const stages = [
-        { id: "INGEST", label: "1. Ingest", icon: "fa-file-import" },
-        { id: "CLASSIFY", label: "2. Classify", icon: "fa-shield-halved" },
-        { id: "EXTRACT", label: "3. Extract", icon: "fa-magnifying-glass-chart" },
-        { id: "RECONCILE", label: "4. Reconcile", icon: "fa-diagram-project" },
-        { id: "EXAMINE", label: "5. Examine", icon: "fa-scale-balanced" },
-        { id: "GATE", label: "6. Approval Gate", icon: "fa-user-check" },
-        { id: "DELIVER", label: "7. Deliver", icon: "fa-box-archive" }
+      const handleApproveSingle = async (findingId) => {
+        try {
+          const res = await fetch(`/api/v1/projects/${projectId}/findings/approve`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ finding_id: findingId, approved: true })
+          });
+          if (res.ok) {
+            sendMessage(`I've approved finding ${findingId}. Update status!`);
+          }
+        } catch (e) {
+          console.error("Approve Error", e);
+        }
+      };
+
+      const quickChips = [
+        { label: "▶ Run Document Pile Scan", action: "Run full document analysis" },
+        { label: "🚨 Show Discrepancy Findings", action: "Show findings" },
+        { label: "✅ Approve All Findings", action: "Approve all findings" },
+        { label: "📊 Show Reconciled Register", action: "Show register" },
+        { label: "⚖️ What is the penalty clause?", action: "What is the penalty clause rate?" },
+        { label: "💳 Explain invoice discrepancy", action: "Tell me about the invoice discrepancy" }
       ];
 
       return (
-        <div class="max-w-7xl mx-auto px-4 py-8">
-          {/* Header */}
-          <header class="flex flex-col md:flex-row justify-between items-start md:items-center pb-8 border-b border-slate-800 gap-4">
-            <div>
-              <div class="flex items-center gap-3">
-                <i class="fa-solid fa-cube text-indigo-500 text-3xl"></i>
-                <h1 class="text-3xl font-extrabold gradient-text">DocuMesh Engine</h1>
+        <div class="flex flex-col h-screen max-w-5xl mx-auto px-4 py-6">
+          {/* Minimalist Top Header */}
+          <header class="flex items-center justify-between pb-4 border-b border-slate-800">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 font-bold text-xl">
+                <i class="fa-solid fa-cube"></i>
               </div>
-              <p class="text-slate-400 text-sm mt-1">
-                Agentic Document Reconciliation & Compliance Audit Platform • <span class="text-indigo-400 font-mono">Greenfield Tech Park</span>
-              </p>
+              <div>
+                <h1 class="text-xl font-bold gradient-text">DocuMesh AI</h1>
+                <p class="text-xs text-slate-400">Agentic LangGraph Reconciliation Engine • Greenfield Tech Park</p>
+              </div>
             </div>
 
-            <div class="flex items-center gap-3">
-              <button
-                onClick={triggerRun}
-                disabled={loading}
-                class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg shadow-lg shadow-indigo-500/20 transition flex items-center gap-2"
+            <div class="flex items-center gap-2">
+              <a
+                href="/docs"
+                target="_blank"
+                class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition border border-slate-700 flex items-center gap-1.5"
               >
-                <i class={`fa-solid ${loading ? "fa-spinner fa-spin" : "fa-play"}`}></i>
-                {loading ? "Analyzing Document Pile..." : "Run Document Pile Analysis"}
-              </button>
+                <i class="fa-solid fa-code"></i> API Docs
+              </a>
+              <a
+                href={`/api/v1/projects/${projectId}/export-report`}
+                target="_blank"
+                class="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition flex items-center gap-1.5"
+              >
+                <i class="fa-solid fa-file-pdf"></i> Export Executive Report
+              </a>
             </div>
           </header>
 
-          {/* Pipeline Stage Stepper */}
-          <div class="my-8 glass-card p-6 rounded-2xl">
-            <h2 class="text-xs uppercase tracking-wider text-slate-400 font-bold mb-4">Live LangGraph State Machine Execution Flow</h2>
-            <div class="grid grid-cols-2 md:grid-cols-7 gap-3">
-              {stages.map((stg, i) => {
-                const isActive = currentNode === stg.id;
-                const isPassed = ["DELIVER", "GATE_APPROVED", "COMPLETED"].includes(pipelineStatus) || (currentNode === "GATE" && i < 5);
+          {/* Chat Messages Container */}
+          <div class="flex-1 overflow-y-auto my-4 space-y-6 pr-2">
+            {chatMessages.map((msg, idx) => (
+              <div key={idx} class={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                <div class={`p-5 rounded-2xl max-w-3xl text-sm leading-relaxed ${msg.role === "user" ? "bg-indigo-600 text-white rounded-br-none shadow-lg shadow-indigo-600/20" : "glass-panel text-slate-100 rounded-bl-none shadow-xl"}`}>
+                  <p class="whitespace-pre-wrap font-sans">{msg.content}</p>
 
-                let bgClass = "bg-slate-800/50 border-slate-700/50 text-slate-500";
-                if (isActive) bgClass = "bg-indigo-950 border-indigo-500 text-indigo-300 ring-2 ring-indigo-500/30";
-                else if (isPassed) bgClass = "bg-emerald-950/40 border-emerald-500/40 text-emerald-400";
+                  {/* IN-CHAT INTERACTIVE COMPONENT: FINDINGS APPROVAL GATE */}
+                  {msg.action_payload?.type === "FINDINGS_APPROVAL_GATE" && (
+                    <div class="mt-4 pt-4 border-t border-slate-700/60 space-y-4">
+                      <h4 class="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                        <i class="fa-solid fa-triangle-exclamation"></i> Action Required: Review & Approve Findings ({msg.action_payload.pending_findings.length})
+                      </h4>
 
-                return (
-                  <div key={stg.id} class={`p-3 rounded-xl border flex flex-col items-center text-center transition ${bgClass}`}>
-                    <i class={`fa-solid ${stg.icon} text-lg mb-2 ${isActive ? "text-indigo-400 animate-pulse" : isPassed ? "text-emerald-400" : ""}`}></i>
-                    <span class="text-xs font-semibold">{stg.label}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Navigation Tabs */}
-          <div class="flex border-b border-slate-800 mb-6 gap-2">
-            <button
-              onClick={() => setActiveTab("findings")}
-              class={`px-4 py-3 font-semibold text-sm border-b-2 transition flex items-center gap-2 ${activeTab === "findings" ? "border-indigo-500 text-indigo-400" : "border-transparent text-slate-400 hover:text-slate-200"}`}
-            >
-              <i class="fa-solid fa-triangle-exclamation"></i>
-              Discrepancy Findings ({findings.length})
-            </button>
-            <button
-              onClick={() => { setActiveTab("register"); fetchRegister(); }}
-              class={`px-4 py-3 font-semibold text-sm border-b-2 transition flex items-center gap-2 ${activeTab === "register" ? "border-indigo-500 text-indigo-400" : "border-transparent text-slate-400 hover:text-slate-200"}`}
-            >
-              <i class="fa-solid fa-table-list"></i>
-              Reconciled Project Register
-            </button>
-            <button
-              onClick={() => setActiveTab("chat")}
-              class={`px-4 py-3 font-semibold text-sm border-b-2 transition flex items-center gap-2 ${activeTab === "chat" ? "border-indigo-500 text-indigo-400" : "border-transparent text-slate-400 hover:text-slate-200"}`}
-            >
-              <i class="fa-solid fa-comments"></i>
-              Document Q&A Chat
-            </button>
-          </div>
-
-          {/* TAB 1: DISCREPANCY FINDINGS & HUMAN GATE */}
-          {activeTab === "findings" && (
-            <div>
-              <div class="flex justify-between items-center mb-6">
-                <div>
-                  <h2 class="text-xl font-bold">Cross-Document Discrepancy Findings</h2>
-                  <p class="text-slate-400 text-sm">Review detected contradictions between contracts, reports, invoices, and receipts.</p>
-                </div>
-                {findings.some(f => f.status === "PRESENTED") && (
-                  <button
-                    onClick={handleBatchApprove}
-                    class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm rounded-lg shadow transition flex items-center gap-2"
-                  >
-                    <i class="fa-solid fa-check-double"></i>
-                    Approve All Findings ({findings.filter(f => f.status === "PRESENTED").length})
-                  </button>
-                )}
-              </div>
-
-              {findings.length === 0 ? (
-                <div class="text-center py-12 glass-card rounded-2xl text-slate-400">
-                  <i class="fa-solid fa-circle-check text-4xl text-emerald-500 mb-3"></i>
-                  <p class="text-lg font-semibold">No active discrepancy findings!</p>
-                  <p class="text-sm text-slate-500">Click 'Run Document Pile Analysis' above to start scan.</p>
-                </div>
-              ) : (
-                <div class="space-y-6">
-                  {findings.map(f => {
-                    let sevBadge = "bg-rose-500/20 text-rose-300 border-rose-500/30";
-                    if (f.severity === "HIGH") sevBadge = "bg-amber-500/20 text-amber-300 border-amber-500/30";
-                    if (f.severity === "MEDIUM") sevBadge = "bg-sky-500/20 text-sky-300 border-sky-500/30";
-                    if (f.severity === "LOW") sevBadge = "bg-slate-500/20 text-slate-300 border-slate-500/30";
-
-                    const isApproved = f.status === "APPROVED";
-                    const isRejected = f.status === "REJECTED";
-
-                    return (
-                      <div key={f.finding_id} class="glass-card p-6 rounded-2xl border border-slate-800 hover:border-slate-700 transition">
-                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-slate-800">
-                          <div>
-                            <div class="flex items-center gap-3">
-                              <span class={`px-2.5 py-1 text-xs font-bold rounded-md border ${sevBadge}`}>
+                      {msg.action_payload.pending_findings.map((f) => (
+                        <div key={f.finding_id} class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
+                          <div class="flex justify-between items-center mb-2">
+                            <div class="flex items-center gap-2">
+                              <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30 text-[10px]">
                                 {f.severity}
                               </span>
-                              <span class="text-xs font-mono text-slate-400">[{f.finding_id}]</span>
-                              <h3 class="text-lg font-bold text-slate-100">{f.title}</h3>
+                              <strong class="text-slate-100 font-bold">[{f.finding_id}] {f.title}</strong>
                             </div>
-                            <p class="text-slate-300 text-sm mt-2">{f.description}</p>
+                            <button
+                              onClick={() => handleApproveSingle(f.finding_id)}
+                              class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded transition text-[11px]"
+                            >
+                              Approve Fix
+                            </button>
                           </div>
-
-                          <div class="flex items-center gap-2">
-                            {isApproved ? (
-                              <span class="px-3 py-1.5 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-xs font-bold rounded-lg flex items-center gap-1.5">
-                                <i class="fa-solid fa-check"></i> APPROVED
-                              </span>
-                            ) : isRejected ? (
-                              <span class="px-3 py-1.5 bg-rose-500/20 border border-rose-500/40 text-rose-400 text-xs font-bold rounded-lg flex items-center gap-1.5">
-                                <i class="fa-solid fa-xmark"></i> REJECTED
-                              </span>
-                            ) : (
-                              <div class="flex items-center gap-2">
-                                <button
-                                  onClick={() => handleDecision(f.finding_id, true)}
-                                  class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5"
-                                >
-                                  <i class="fa-solid fa-check"></i> Approve
-                                </button>
-                                <button
-                                  onClick={() => handleDecision(f.finding_id, false)}
-                                  class="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5"
-                                >
-                                  <i class="fa-solid fa-xmark"></i> Reject
-                                </button>
-                              </div>
-                            )}
+                          <p class="text-slate-300 mb-2">{f.description}</p>
+                          <div class="font-mono text-indigo-300 bg-indigo-950/40 p-2 rounded border border-indigo-900/50 italic">
+                            <strong>Source Quote ({f.source_a.filename}):</strong> "{f.source_a.exact_quote}"
                           </div>
                         </div>
+                      ))}
 
-                        {/* Side-by-side verbatim quotes */}
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 my-4">
-                          <div class="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800">
-                            <div class="flex justify-between text-xs font-semibold text-slate-400 mb-1">
-                              <span>Source A: {f.source_a.filename}</span>
-                              <span class="font-mono text-indigo-400">{f.source_a.location}</span>
-                            </div>
-                            <p class="text-xs font-mono text-amber-200/90 italic bg-amber-950/30 p-2.5 rounded-lg border border-amber-800/30 mt-1">
-                              "{f.source_a.exact_quote}"
-                            </p>
-                          </div>
-
-                          {f.source_b && (
-                            <div class="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800">
-                              <div class="flex justify-between text-xs font-semibold text-slate-400 mb-1">
-                                <span>Source B: {f.source_b.filename}</span>
-                                <span class="font-mono text-indigo-400">{f.source_b.location}</span>
-                              </div>
-                              <p class="text-xs font-mono text-indigo-200/90 italic bg-indigo-950/30 p-2.5 rounded-lg border border-indigo-800/30 mt-1">
-                                "{f.source_b.exact_quote}"
-                              </p>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Actionable Remediation Directive */}
-                        {f.resolution_action && (
-                          <div class="p-3 rounded-xl bg-indigo-950/40 border border-indigo-500/30 flex items-start gap-2.5 text-xs text-indigo-300">
-                            <i class="fa-solid fa-wand-magic-sparkles text-indigo-400 text-sm mt-0.5"></i>
-                            <div>
-                              <strong class="font-semibold text-indigo-200">AI Proposed Remediation:</strong> {f.resolution_action}
-                            </div>
-                          </div>
-                        )}
+                      <div class="pt-2 flex gap-2">
+                        <button
+                          onClick={() => sendMessage("Approve all findings")}
+                          class="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition shadow flex items-center justify-center gap-2"
+                        >
+                          <i class="fa-solid fa-check-double"></i> Batch Approve All Findings
+                        </button>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 2: RECONCILED PROJECT REGISTER */}
-          {activeTab === "register" && (
-            <div>
-              <div class="flex justify-between items-center mb-6">
-                <div>
-                  <h2 class="text-xl font-bold">Reconciled Project Register</h2>
-                  <p class="text-slate-400 text-sm">Audited metrics compiled across all 8 documents with primary source citations.</p>
-                </div>
-                <a
-                  href={`/api/v1/projects/${projectId}/export-report`}
-                  target="_blank"
-                  class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-lg transition flex items-center gap-2"
-                >
-                  <i class="fa-solid fa-file-pdf"></i>
-                  Export Executive HTML/PDF Report
-                </a>
-              </div>
-
-              {!register ? (
-                <div class="text-center py-12 glass-card rounded-2xl text-slate-400">
-                  <p class="text-lg font-semibold">Project Register Deliverable Not Ready Yet</p>
-                  <p class="text-sm text-slate-500 mt-1">Approve findings in 'Discrepancy Findings' tab above to finalize register.</p>
-                </div>
-              ) : (
-                <div class="glass-card rounded-2xl overflow-hidden border border-slate-800">
-                  <table class="w-full text-left text-sm text-slate-300">
-                    <thead class="bg-slate-900/80 text-xs uppercase font-bold text-slate-400 border-b border-slate-800">
-                      <tr>
-                        <th class="p-4">Entity Metric</th>
-                        <th class="p-4">Reconciled Value</th>
-                        <th class="p-4">Status</th>
-                        <th class="p-4">Primary Citation</th>
-                      </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-800">
-                      {register.entries.map((e, idx) => {
-                        let stBadge = "bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
-                        if (e.status === "CONTRADICTED") stBadge = "bg-rose-500/20 text-rose-400 border-rose-500/30";
-                        if (e.status === "SUPERSEDED") stBadge = "bg-purple-500/20 text-purple-400 border-purple-500/30";
-
-                        return (
-                          <tr key={idx} class="hover:bg-slate-800/40 transition">
-                            <td class="p-4 font-semibold text-slate-100">{e.title}</td>
-                            <td class="p-4 font-mono font-bold text-indigo-300">{e.reconciled_value}</td>
-                            <td class="p-4">
-                              <span class={`px-2.5 py-1 text-xs font-bold rounded-md border ${stBadge}`}>
-                                {e.status}
-                              </span>
-                            </td>
-                            <td class="p-4 text-xs font-mono text-slate-400">
-                              {e.primary_citation.filename} ({e.primary_citation.location})
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 3: DOCUMENT Q&A CHAT */}
-          {activeTab === "chat" && (
-            <div class="glass-card rounded-2xl p-6 border border-slate-800 flex flex-col h-[600px]">
-              <div class="pb-4 border-b border-slate-800 mb-4 flex justify-between items-center">
-                <div>
-                  <h2 class="text-lg font-bold flex items-center gap-2">
-                    <i class="fa-solid fa-robot text-indigo-400"></i> Document-Aware AI Assistant
-                  </h2>
-                  <p class="text-xs text-slate-400">Ask any question about Greenfield Tech Park contracts, progress, or financial terms.</p>
-                </div>
-              </div>
-
-              {/* Chat Thread */}
-              <div class="flex-1 overflow-y-auto space-y-4 pr-2">
-                {chatMessages.map((msg, i) => (
-                  <div key={i} class={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
-                    <div class={`p-4 rounded-2xl max-w-2xl text-sm ${msg.role === "user" ? "bg-indigo-600 text-white rounded-br-none" : "bg-slate-800 text-slate-200 rounded-bl-none border border-slate-700"}`}>
-                      <p class="whitespace-pre-wrap">{msg.content}</p>
-
-                      {msg.citations && msg.citations.length > 0 && (
-                        <div class="mt-3 pt-3 border-t border-slate-700/60 text-xs text-indigo-300 font-mono space-y-1">
-                          <strong class="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Source Document Evidence:</strong>
-                          {msg.citations.map((c, cIdx) => (
-                            <div key={cIdx} class="flex items-center gap-1.5">
-                              <i class="fa-solid fa-link text-[10px] text-indigo-400"></i>
-                              <span>{c.doc_name} — {c.section}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
                     </div>
-                  </div>
-                ))}
-              </div>
+                  )}
 
-              {/* Chat Input */}
-              <form onSubmit={sendChatMessage} class="mt-4 pt-4 border-t border-slate-800 flex gap-3">
-                <input
-                  type="text"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="Ask a question (e.g. 'What is the penalty rate in Master Project Plan?')..."
-                  class="flex-1 px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
-                />
-                <button
-                  type="submit"
-                  class="px-5 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-sm transition flex items-center gap-2"
-                >
-                  <i class="fa-solid fa-paper-plane"></i> Send
-                </button>
-              </form>
-            </div>
-          )}
+                  {/* IN-CHAT INTERACTIVE COMPONENT: RECONCILED PROJECT REGISTER TABLE */}
+                  {msg.action_payload?.type === "SHOW_REGISTER" && msg.action_payload.register && (
+                    <div class="mt-4 pt-4 border-t border-slate-700/60">
+                      <div class="rounded-xl overflow-hidden border border-slate-800 bg-slate-900/80 text-xs">
+                        <table class="w-full text-left">
+                          <thead class="bg-slate-950 text-slate-400 font-bold uppercase text-[10px] border-b border-slate-800">
+                            <tr>
+                              <th class="p-2.5">Metric</th>
+                              <th class="p-2.5">Reconciled Value</th>
+                              <th class="p-2.5">Status</th>
+                              <th class="p-2.5">Citation</th>
+                            </tr>
+                          </thead>
+                          <tbody class="divide-y divide-slate-800">
+                            {msg.action_payload.register.entries.map((e, eIdx) => (
+                              <tr key={eIdx} class="hover:bg-slate-850">
+                                <td class="p-2.5 font-semibold text-slate-200">{e.title}</td>
+                                <td class="p-2.5 font-mono text-indigo-300 font-bold">{e.reconciled_value}</td>
+                                <td class="p-2.5">
+                                  <span class={`px-2 py-0.5 rounded text-[10px] font-bold ${e.status === 'CORROBORATED' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
+                                    {e.status}
+                                  </span>
+                                </td>
+                                <td class="p-2.5 text-slate-400 font-mono text-[10px]">{e.primary_citation.filename}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {loading && (
+              <div class="flex items-start">
+                <div class="p-4 rounded-2xl glass-panel text-slate-400 text-xs flex items-center gap-3">
+                  <i class="fa-solid fa-spinner fa-spin text-indigo-400 text-base"></i>
+                  <span>DocuMesh AI is reasoning over the document graph...</span>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Quick Suggestion Chips */}
+          <div class="py-2 flex items-center gap-2 overflow-x-auto no-scrollbar">
+            {quickChips.map((chip, cIdx) => (
+              <button
+                key={cIdx}
+                onClick={() => sendMessage(chip.action)}
+                class="px-3 py-1.5 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs border border-slate-800 hover:border-indigo-500/50 transition whitespace-nowrap"
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Chat Input Bar */}
+          <form onSubmit={(e) => { e.preventDefault(); sendMessage(); }} class="pt-2 flex gap-3">
+            <input
+              type="text"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              placeholder="Ask anything or type 'run analysis'..."
+              class="flex-1 px-5 py-3.5 bg-slate-900 border border-slate-800 rounded-2xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition shadow-inner"
+            />
+            <button
+              type="submit"
+              disabled={loading}
+              class="px-6 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-2xl text-sm transition shadow-lg shadow-indigo-600/20 flex items-center gap-2"
+            >
+              <i class="fa-solid fa-paper-plane"></i>
+            </button>
+          </form>
         </div>
       );
     }
