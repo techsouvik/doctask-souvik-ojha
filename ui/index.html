@@ -3,11 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DocuMesh AI — Conversational Document Reconciliation Engine</title>
+  <title>DocuMesh AI — Minimalist Chat Engine</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- FontAwesome Icons CDN -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <!-- Marked.js Markdown Parser CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <!-- React & ReactDOM CDN -->
   <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
@@ -20,10 +22,14 @@
       -webkit-text-fill-color: transparent;
     }
     .glass-panel {
-      background: rgba(15, 23, 42, 0.75);
+      background: rgba(15, 23, 42, 0.85);
       backdrop-filter: blur(16px);
       border: 1px solid rgba(255, 255, 255, 0.08);
     }
+    .prose-dark p { margin-bottom: 0.5rem; }
+    .prose-dark ul { list-style-type: disc; padding-left: 1.25rem; margin-bottom: 0.5rem; }
+    .prose-dark strong { color: #f8fafc; font-weight: 700; }
+    .prose-dark code { background: rgba(255,255,255,0.1); padding: 0.1rem 0.3rem; rounded: 0.25rem; font-family: monospace; }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 font-sans antialiased min-h-screen">
@@ -34,7 +40,12 @@
 
     function App() {
       const [projectId] = useState("proj_greenfield_tech_park");
-      const [treeId] = useState("chat_session_main");
+      const [treeId, setTreeId] = useState("chat_session_main");
+      const [sessions, setSessions] = useState([
+        { id: "chat_session_main", title: "Main Audit Thread" },
+        { id: "tree_demo", title: "Document Pile Analysis" }
+      ]);
+      const [documents, setDocuments] = useState([]);
       const [chatMessages, setChatMessages] = useState([
         {
           role: "assistant",
@@ -44,11 +55,62 @@
       ]);
       const [chatInput, setChatInput] = useState("");
       const [loading, setLoading] = useState(false);
+      const [sidebarOpen, setSidebarOpen] = useState(true);
       const messagesEndRef = useRef(null);
+
+      useEffect(() => {
+        fetchDocuments();
+        fetchSessions();
+      }, []);
 
       useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
       }, [chatMessages, loading]);
+
+      const fetchDocuments = async () => {
+        try {
+          const res = await fetch(`/api/v1/projects/${projectId}/documents`);
+          if (res.ok) {
+            const data = await res.json();
+            setDocuments(data.documents || []);
+          }
+        } catch (e) {
+          console.error("Docs error", e);
+        }
+      };
+
+      const fetchSessions = async () => {
+        try {
+          const res = await fetch(`/api/v1/projects/${projectId}/sessions`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.sessions && data.sessions.length > 0) {
+              setSessions(data.sessions.map(s => ({ id: s.tree_id, title: s.title || s.tree_id })));
+            }
+          }
+        } catch (e) {
+          console.error("Sessions error", e);
+        }
+      };
+
+      const switchSession = async (sId) => {
+        setTreeId(sId);
+        try {
+          const res = await fetch(`/api/v1/projects/${projectId}/sessions/${sId}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.nodes) {
+              setChatMessages(data.nodes.map(n => ({
+                role: n.role,
+                content: n.content,
+                action_payload: n.metadata?.action_payload || null
+              })));
+            }
+          }
+        } catch (e) {
+          console.error("Switch session error", e);
+        }
+      };
 
       const sendMessage = async (textToSend) => {
         const query = textToSend || chatInput;
@@ -72,6 +134,7 @@
               content: data.assistant_node.content,
               action_payload: data.action_payload
             }]);
+            fetchSessions();
           }
         } catch (e) {
           console.error("Chat Error", e);
@@ -95,6 +158,14 @@
         }
       };
 
+      // Helper to render Markdown cleanly
+      const renderMarkdown = (text) => {
+        if (typeof marked !== "undefined") {
+          return { __html: marked.parse(text || "") };
+        }
+        return { __html: text };
+      };
+
       const quickChips = [
         { label: "▶ Run Document Pile Scan", action: "Run full document analysis" },
         { label: "🚨 Show Discrepancy Findings", action: "Show findings" },
@@ -105,161 +176,234 @@
       ];
 
       return (
-        <div class="flex flex-col h-screen max-w-5xl mx-auto px-4 py-6">
-          {/* Minimalist Top Header */}
-          <header class="flex items-center justify-between pb-4 border-b border-slate-800">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 font-bold text-xl">
-                <i class="fa-solid fa-cube"></i>
+        <div class="flex h-screen overflow-hidden">
+          {/* LEFT SIDEBAR: History Conversations & Uploaded Files */}
+          <aside class={`${sidebarOpen ? "w-80" : "w-0"} glass-panel border-r border-slate-800 flex flex-col transition-all duration-300 overflow-hidden`}>
+            <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <i class="fa-solid fa-cube text-indigo-500 text-xl"></i>
+                <span class="font-bold text-sm gradient-text">DocuMesh Workspace</span>
               </div>
-              <div>
-                <h1 class="text-xl font-bold gradient-text">DocuMesh AI</h1>
-                <p class="text-xs text-slate-400">Agentic LangGraph Reconciliation Engine • Greenfield Tech Park</p>
-              </div>
-            </div>
-
-            <div class="flex items-center gap-2">
-              <a
-                href="/docs"
-                target="_blank"
-                class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition border border-slate-700 flex items-center gap-1.5"
-              >
-                <i class="fa-solid fa-code"></i> API Docs
-              </a>
-              <a
-                href={`/api/v1/projects/${projectId}/export-report`}
-                target="_blank"
-                class="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition flex items-center gap-1.5"
-              >
-                <i class="fa-solid fa-file-pdf"></i> Export Executive Report
-              </a>
-            </div>
-          </header>
-
-          {/* Chat Messages Container */}
-          <div class="flex-1 overflow-y-auto my-4 space-y-6 pr-2">
-            {chatMessages.map((msg, idx) => (
-              <div key={idx} class={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
-                <div class={`p-5 rounded-2xl max-w-3xl text-sm leading-relaxed ${msg.role === "user" ? "bg-indigo-600 text-white rounded-br-none shadow-lg shadow-indigo-600/20" : "glass-panel text-slate-100 rounded-bl-none shadow-xl"}`}>
-                  <p class="whitespace-pre-wrap font-sans">{msg.content}</p>
-
-                  {/* IN-CHAT INTERACTIVE COMPONENT: FINDINGS APPROVAL GATE */}
-                  {msg.action_payload?.type === "FINDINGS_APPROVAL_GATE" && (
-                    <div class="mt-4 pt-4 border-t border-slate-700/60 space-y-4">
-                      <h4 class="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-                        <i class="fa-solid fa-triangle-exclamation"></i> Action Required: Review & Approve Findings ({msg.action_payload.pending_findings.length})
-                      </h4>
-
-                      {msg.action_payload.pending_findings.map((f) => (
-                        <div key={f.finding_id} class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
-                          <div class="flex justify-between items-center mb-2">
-                            <div class="flex items-center gap-2">
-                              <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30 text-[10px]">
-                                {f.severity}
-                              </span>
-                              <strong class="text-slate-100 font-bold">[{f.finding_id}] {f.title}</strong>
-                            </div>
-                            <button
-                              onClick={() => handleApproveSingle(f.finding_id)}
-                              class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded transition text-[11px]"
-                            >
-                              Approve Fix
-                            </button>
-                          </div>
-                          <p class="text-slate-300 mb-2">{f.description}</p>
-                          <div class="font-mono text-indigo-300 bg-indigo-950/40 p-2 rounded border border-indigo-900/50 italic">
-                            <strong>Source Quote ({f.source_a.filename}):</strong> "{f.source_a.exact_quote}"
-                          </div>
-                        </div>
-                      ))}
-
-                      <div class="pt-2 flex gap-2">
-                        <button
-                          onClick={() => sendMessage("Approve all findings")}
-                          class="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition shadow flex items-center justify-center gap-2"
-                        >
-                          <i class="fa-solid fa-check-double"></i> Batch Approve All Findings
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* IN-CHAT INTERACTIVE COMPONENT: RECONCILED PROJECT REGISTER TABLE */}
-                  {msg.action_payload?.type === "SHOW_REGISTER" && msg.action_payload.register && (
-                    <div class="mt-4 pt-4 border-t border-slate-700/60">
-                      <div class="rounded-xl overflow-hidden border border-slate-800 bg-slate-900/80 text-xs">
-                        <table class="w-full text-left">
-                          <thead class="bg-slate-950 text-slate-400 font-bold uppercase text-[10px] border-b border-slate-800">
-                            <tr>
-                              <th class="p-2.5">Metric</th>
-                              <th class="p-2.5">Reconciled Value</th>
-                              <th class="p-2.5">Status</th>
-                              <th class="p-2.5">Citation</th>
-                            </tr>
-                          </thead>
-                          <tbody class="divide-y divide-slate-800">
-                            {msg.action_payload.register.entries.map((e, eIdx) => (
-                              <tr key={eIdx} class="hover:bg-slate-850">
-                                <td class="p-2.5 font-semibold text-slate-200">{e.title}</td>
-                                <td class="p-2.5 font-mono text-indigo-300 font-bold">{e.reconciled_value}</td>
-                                <td class="p-2.5">
-                                  <span class={`px-2 py-0.5 rounded text-[10px] font-bold ${e.status === 'CORROBORATED' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
-                                    {e.status}
-                                  </span>
-                                </td>
-                                <td class="p-2.5 text-slate-400 font-mono text-[10px]">{e.primary_citation.filename}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-
-            {loading && (
-              <div class="flex items-start">
-                <div class="p-4 rounded-2xl glass-panel text-slate-400 text-xs flex items-center gap-3">
-                  <i class="fa-solid fa-spinner fa-spin text-indigo-400 text-base"></i>
-                  <span>DocuMesh AI is reasoning over the document graph...</span>
-                </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Quick Suggestion Chips */}
-          <div class="py-2 flex items-center gap-2 overflow-x-auto no-scrollbar">
-            {quickChips.map((chip, cIdx) => (
-              <button
-                key={cIdx}
-                onClick={() => sendMessage(chip.action)}
-                class="px-3 py-1.5 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs border border-slate-800 hover:border-indigo-500/50 transition whitespace-nowrap"
-              >
-                {chip.label}
+              <button onClick={() => setSidebarOpen(false)} class="text-slate-400 hover:text-slate-200">
+                <i class="fa-solid fa-xmark"></i>
               </button>
-            ))}
-          </div>
+            </div>
 
-          {/* Chat Input Bar */}
-          <form onSubmit={(e) => { e.preventDefault(); sendMessage(); }} class="pt-2 flex gap-3">
-            <input
-              type="text"
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              placeholder="Ask anything or type 'run analysis'..."
-              class="flex-1 px-5 py-3.5 bg-slate-900 border border-slate-800 rounded-2xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition shadow-inner"
-            />
-            <button
-              type="submit"
-              disabled={loading}
-              class="px-6 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-2xl text-sm transition shadow-lg shadow-indigo-600/20 flex items-center gap-2"
-            >
-              <i class="fa-solid fa-paper-plane"></i>
-            </button>
-          </form>
+            {/* Conversation Threads Section */}
+            <div class="p-4 border-b border-slate-800/80">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
+                <i class="fa-solid fa-clock-rotate-left"></i> Past Conversations
+              </h3>
+              <div class="space-y-1.5 max-h-48 overflow-y-auto">
+                {sessions.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => switchSession(s.id)}
+                    class={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition truncate flex items-center gap-2 ${treeId === s.id ? "bg-indigo-600/30 text-indigo-300 border border-indigo-500/40" : "text-slate-300 hover:bg-slate-800/60"}`}
+                  >
+                    <i class="fa-regular fa-message text-indigo-400 text-xs"></i>
+                    <span class="truncate">{s.title}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Uploaded Document Pile Section */}
+            <div class="p-4 flex-1 overflow-y-auto">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
+                <i class="fa-solid fa-folder-closed"></i> Uploaded Document Pile ({documents.length})
+              </h3>
+              <div class="space-y-2">
+                {documents.map((doc, idx) => {
+                  let docIcon = "fa-file-lines text-slate-400";
+                  if (doc.filename.endsWith(".pdf")) docIcon = "fa-file-pdf text-rose-400";
+                  if (doc.filename.endsWith(".docx")) docIcon = "fa-file-word text-sky-400";
+
+                  return (
+                    <div key={idx} class="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80 text-xs hover:border-slate-700 transition">
+                      <div class="flex items-center gap-2 font-semibold text-slate-200 truncate">
+                        <i class={`fa-solid ${docIcon}`}></i>
+                        <span class="truncate">{doc.filename}</span>
+                      </div>
+                      <div class="flex justify-between items-center text-[10px] text-slate-500 mt-1 font-mono">
+                        <span>{doc.doc_type}</span>
+                        <span>{doc.checksum ? doc.checksum.substring(0, 8) : "Grounded"}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Features Brief Footer */}
+            <div class="p-4 border-t border-slate-800 text-[11px] text-slate-400 space-y-1">
+              <div class="font-bold text-slate-300 mb-1">DocuMesh Features Brief:</div>
+              <div>• 7-Stage LangGraph State Machine</div>
+              <div>• SQLite Checkpointing (Kill & Resume)</div>
+              <div>• Verbatim Quote Grounding (Zero Hallucination)</div>
+              <div>• Sub-30ms Hybrid BM25 & Vector Search</div>
+            </div>
+          </aside>
+
+          {/* MAIN CHAT AREA */}
+          <main class="flex-1 flex flex-col h-screen overflow-hidden">
+            {/* Top Bar */}
+            <header class="p-4 border-b border-slate-800 flex items-center justify-between glass-panel">
+              <div class="flex items-center gap-3">
+                {!sidebarOpen && (
+                  <button onClick={() => setSidebarOpen(true)} class="p-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition">
+                    <i class="fa-solid fa-bars"></i>
+                  </button>
+                )}
+                <div>
+                  <h1 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                    <i class="fa-solid fa-robot text-indigo-400"></i> DocuMesh AI Chat
+                  </h1>
+                  <p class="text-xs text-slate-400">Project Workspace: <span class="font-mono text-indigo-300">proj_greenfield_tech_park</span></p>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <a
+                  href={`/api/v1/projects/${projectId}/export-report`}
+                  target="_blank"
+                  class="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition flex items-center gap-1.5 shadow"
+                >
+                  <i class="fa-solid fa-file-pdf"></i> Export Executive Report
+                </a>
+              </div>
+            </header>
+
+            {/* Messages Feed */}
+            <div class="flex-1 overflow-y-auto p-6 space-y-6">
+              {chatMessages.map((msg, idx) => (
+                <div key={idx} class={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                  <div class={`p-5 rounded-2xl max-w-3xl text-sm leading-relaxed ${msg.role === "user" ? "bg-indigo-600 text-white rounded-br-none shadow-lg shadow-indigo-600/20" : "glass-panel text-slate-100 rounded-bl-none shadow-xl border border-slate-800"}`}>
+                    
+                    {/* Rendered Markdown Response */}
+                    <div
+                      class="prose-dark font-sans"
+                      dangerouslySetInnerHTML={renderMarkdown(msg.content)}
+                    />
+
+                    {/* IN-CHAT INTERACTIVE COMPONENT: FINDINGS APPROVAL GATE */}
+                    {msg.action_payload?.type === "FINDINGS_APPROVAL_GATE" && (
+                      <div class="mt-4 pt-4 border-t border-slate-700/60 space-y-4">
+                        <h4 class="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                          <i class="fa-solid fa-triangle-exclamation"></i> Action Required: Review & Approve Findings ({msg.action_payload.pending_findings.length})
+                        </h4>
+
+                        {msg.action_payload.pending_findings.map((f) => (
+                          <div key={f.finding_id} class="p-4 rounded-xl bg-slate-900/90 border border-slate-800 text-xs">
+                            <div class="flex justify-between items-center mb-2">
+                              <div class="flex items-center gap-2">
+                                <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30 text-[10px]">
+                                  {f.severity}
+                                </span>
+                                <strong class="text-slate-100 font-bold">[{f.finding_id}] {f.title}</strong>
+                              </div>
+                              <button
+                                onClick={() => handleApproveSingle(f.finding_id)}
+                                class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded transition text-[11px]"
+                              >
+                                Approve Fix
+                              </button>
+                            </div>
+                            <p class="text-slate-300 mb-2">{f.description}</p>
+                            <div class="font-mono text-indigo-300 bg-indigo-950/40 p-2 rounded border border-indigo-900/50 italic">
+                              <strong>Source Quote ({f.source_a.filename}):</strong> "{f.source_a.exact_quote}"
+                            </div>
+                          </div>
+                        ))}
+
+                        <div class="pt-2 flex gap-2">
+                          <button
+                            onClick={() => sendMessage("Approve all findings")}
+                            class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition shadow flex items-center justify-center gap-2"
+                          >
+                            <i class="fa-solid fa-check-double"></i> Batch Approve All Findings
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* IN-CHAT INTERACTIVE COMPONENT: RECONCILED REGISTER TABLE */}
+                    {msg.action_payload?.type === "SHOW_REGISTER" && msg.action_payload.register && (
+                      <div class="mt-4 pt-4 border-t border-slate-700/60">
+                        <div class="rounded-xl overflow-hidden border border-slate-800 bg-slate-900/90 text-xs">
+                          <table class="w-full text-left">
+                            <thead class="bg-slate-950 text-slate-400 font-bold uppercase text-[10px] border-b border-slate-800">
+                              <tr>
+                                <th class="p-2.5">Metric</th>
+                                <th class="p-2.5">Reconciled Value</th>
+                                <th class="p-2.5">Status</th>
+                                <th class="p-2.5">Citation</th>
+                              </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-800">
+                              {msg.action_payload.register.entries.map((e, eIdx) => (
+                                <tr key={eIdx} class="hover:bg-slate-850">
+                                  <td class="p-2.5 font-semibold text-slate-200">{e.title}</td>
+                                  <td class="p-2.5 font-mono text-indigo-300 font-bold">{e.reconciled_value}</td>
+                                  <td class="p-2.5">
+                                    <span class={`px-2 py-0.5 rounded text-[10px] font-bold ${e.status === 'CORROBORATED' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
+                                      {e.status}
+                                    </span>
+                                  </td>
+                                  <td class="p-2.5 text-slate-400 font-mono text-[10px]">{e.primary_citation.filename}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {loading && (
+                <div class="flex items-start">
+                  <div class="p-4 rounded-2xl glass-panel text-slate-400 text-xs flex items-center gap-3 border border-slate-800">
+                    <i class="fa-solid fa-spinner fa-spin text-indigo-400 text-base"></i>
+                    <span>DocuMesh AI is reasoning over the document graph...</span>
+                  </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Quick Suggestion Chips */}
+            <div class="px-6 py-2 flex items-center gap-2 overflow-x-auto no-scrollbar">
+              {quickChips.map((chip, cIdx) => (
+                <button
+                  key={cIdx}
+                  onClick={() => sendMessage(chip.action)}
+                  class="px-3 py-1.5 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs border border-slate-800 hover:border-indigo-500/50 transition whitespace-nowrap"
+                >
+                  {chip.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Chat Input Bar */}
+            <form onSubmit={(e) => { e.preventDefault(); sendMessage(); }} class="p-6 pt-2 flex gap-3">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Ask anything or type 'run analysis'..."
+                class="flex-1 px-5 py-3.5 bg-slate-900 border border-slate-800 rounded-2xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition shadow-inner"
+              />
+              <button
+                type="submit"
+                disabled={loading}
+                class="px-6 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-2xl text-sm transition shadow-lg shadow-indigo-600/20 flex items-center gap-2"
+              >
+                <i class="fa-solid fa-paper-plane"></i>
+              </button>
+            </form>
+          </main>
         </div>
       );
     }
