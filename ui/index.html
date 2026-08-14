@@ -49,14 +49,16 @@
       const [chatMessages, setChatMessages] = useState([
         {
           role: "assistant",
-          content: "Hello! I am **DocuMesh AI**, your agentic document reconciliation assistant powered by LangGraph.\n\nI own the **Greenfield Tech Park** document pile (contracts, status reports, invoices, material receipts, correspondence).\n\nHow can I help you today?",
+          content: "Hello! I am **DocuMesh AI**, your agentic document reconciliation assistant powered by LangGraph.\n\nI own the **Greenfield Tech Park** document pile (contracts, status reports, invoices, material receipts, correspondence).\n\nYou can upload new files using the **📎 attach button** below or the **Upload File** button in the sidebar, or ask me any question!",
           action_payload: null
         }
       ]);
       const [chatInput, setChatInput] = useState("");
       const [loading, setLoading] = useState(false);
+      const [uploading, setUploading] = useState(false);
       const [sidebarOpen, setSidebarOpen] = useState(true);
       const messagesEndRef = useRef(null);
+      const fileInputRef = useRef(null);
 
       useEffect(() => {
         fetchDocuments();
@@ -65,7 +67,7 @@
 
       useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, [chatMessages, loading]);
+      }, [chatMessages, loading, uploading]);
 
       const fetchDocuments = async () => {
         try {
@@ -91,6 +93,37 @@
         } catch (e) {
           console.error("Sessions error", e);
         }
+      };
+
+      const handleFileUpload = async (e) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+
+        setUploading(true);
+        for (let i = 0; i < files.length; i++) {
+          const formData = new FormData();
+          formData.append("file", files[i]);
+
+          try {
+            const res = await fetch(`/api/v1/projects/${projectId}/documents`, {
+              method: "POST",
+              body: formData
+            });
+
+            if (res.ok) {
+              const data = await res.json();
+              setChatMessages(prev => [...prev, {
+                role: "assistant",
+                content: `Successfully uploaded and ingested document **${data.filename || files[i].name}**!\n\n• Classified as: \`${data.doc_type || 'UNKNOWN'}\`\n• Extracted facts: **${data.facts_extracted || 0}**\n\nClick 'Run Document Pile Scan' below to reconcile this new document against the project register!`
+              }]);
+              fetchDocuments();
+            }
+          } catch (e) {
+            console.error("Upload Error", e);
+          }
+        }
+        setUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
       };
 
       const switchSession = async (sId) => {
@@ -158,7 +191,6 @@
         }
       };
 
-      // Helper to render Markdown cleanly
       const renderMarkdown = (text) => {
         if (typeof marked !== "undefined") {
           return { __html: marked.parse(text || "") };
@@ -177,7 +209,17 @@
 
       return (
         <div class="flex h-screen overflow-hidden">
-          {/* LEFT SIDEBAR: History Conversations & Uploaded Files */}
+          {/* Hidden File Input */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+            multiple
+            accept=".docx,.pdf,.txt,.xlsx,.csv"
+            class="hidden"
+          />
+
+          {/* LEFT SIDEBAR */}
           <aside class={`${sidebarOpen ? "w-80" : "w-0"} glass-panel border-r border-slate-800 flex flex-col transition-all duration-300 overflow-hidden`}>
             <div class="p-4 border-b border-slate-800 flex items-center justify-between">
               <div class="flex items-center gap-2.5">
@@ -194,7 +236,7 @@
               <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
                 <i class="fa-solid fa-clock-rotate-left"></i> Past Conversations
               </h3>
-              <div class="space-y-1.5 max-h-48 overflow-y-auto">
+              <div class="space-y-1.5 max-h-40 overflow-y-auto">
                 {sessions.map((s) => (
                   <button
                     key={s.id}
@@ -208,11 +250,20 @@
               </div>
             </div>
 
-            {/* Uploaded Document Pile Section */}
+            {/* Uploaded Document Pile Section with Upload Button */}
             <div class="p-4 flex-1 overflow-y-auto">
-              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
-                <i class="fa-solid fa-folder-closed"></i> Uploaded Document Pile ({documents.length})
-              </h3>
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                  <i class="fa-solid fa-folder-closed"></i> Document Pile ({documents.length})
+                </h3>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  class="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] rounded-lg transition flex items-center gap-1.5 shadow"
+                >
+                  <i class="fa-solid fa-cloud-arrow-up"></i> Upload
+                </button>
+              </div>
+
               <div class="space-y-2">
                 {documents.map((doc, idx) => {
                   let docIcon = "fa-file-lines text-slate-400";
@@ -239,6 +290,7 @@
             <div class="p-4 border-t border-slate-800 text-[11px] text-slate-400 space-y-1">
               <div class="font-bold text-slate-300 mb-1">DocuMesh Features Brief:</div>
               <div>• 7-Stage LangGraph State Machine</div>
+              <div>• Multi-Provider LLM (OpenAI, Claude, Gemini)</div>
               <div>• SQLite Checkpointing (Kill & Resume)</div>
               <div>• Verbatim Quote Grounding (Zero Hallucination)</div>
               <div>• Sub-30ms Hybrid BM25 & Vector Search</div>
@@ -264,6 +316,12 @@
               </div>
 
               <div class="flex items-center gap-2">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition border border-slate-700 flex items-center gap-1.5"
+                >
+                  <i class="fa-solid fa-paperclip"></i> Upload Files
+                </button>
                 <a
                   href={`/api/v1/projects/${projectId}/export-report`}
                   target="_blank"
@@ -362,11 +420,11 @@
                 </div>
               ))}
 
-              {loading && (
+              {(loading || uploading) && (
                 <div class="flex items-start">
                   <div class="p-4 rounded-2xl glass-panel text-slate-400 text-xs flex items-center gap-3 border border-slate-800">
                     <i class="fa-solid fa-spinner fa-spin text-indigo-400 text-base"></i>
-                    <span>DocuMesh AI is reasoning over the document graph...</span>
+                    <span>{uploading ? "Uploading & ingesting document file..." : "DocuMesh AI is reasoning over the document graph..."}</span>
                   </div>
                 </div>
               )}
@@ -386,18 +444,26 @@
               ))}
             </div>
 
-            {/* Chat Input Bar */}
+            {/* Chat Input Bar with Attachment Paperclip Button */}
             <form onSubmit={(e) => { e.preventDefault(); sendMessage(); }} class="p-6 pt-2 flex gap-3">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                class="px-4 py-3.5 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-2xl border border-slate-800 hover:border-indigo-500/50 transition flex items-center justify-center text-base"
+                title="Upload document file (.docx, .pdf, .txt)"
+              >
+                <i class="fa-solid fa-paperclip"></i>
+              </button>
               <input
                 type="text"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Ask anything or type 'run analysis'..."
+                placeholder="Ask anything, type 'run analysis', or attach a file..."
                 class="flex-1 px-5 py-3.5 bg-slate-900 border border-slate-800 rounded-2xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition shadow-inner"
               />
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || uploading}
                 class="px-6 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-2xl text-sm transition shadow-lg shadow-indigo-600/20 flex items-center gap-2"
               >
                 <i class="fa-solid fa-paper-plane"></i>
