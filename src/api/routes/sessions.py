@@ -1,4 +1,4 @@
-"""Sessions & Chat Engine API Router with document-aware Q&A, SSE streaming, and branching trees."""
+"""Sessions & Chat Engine API Router with document-aware Q&A, SSE streaming, branching trees, and project conversion."""
 
 import json
 import asyncio
@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from src.session.tree import SessionTreeManager
 from src.session.chat_engine import ChatEngine
+from src.app.project_service import ProjectService
 
 router = APIRouter(prefix="/projects/{project_id}/sessions", tags=["Chat & Session Trees"])
 _session_manager = SessionTreeManager()
@@ -26,6 +27,10 @@ class BranchMessageRequest(BaseModel):
 
 class RenameSessionRequest(BaseModel):
     title: str
+
+
+class ConvertToProjectRequest(BaseModel):
+    new_project_name: str
 
 
 @router.get("")
@@ -81,11 +86,11 @@ async def stream_session_message(project_id: str, tree_id: str, q: str = Query(.
     async def event_generator():
         # Event 1: Thinking Stage 1
         yield f"data: {json.dumps({'type': 'thinking', 'stage': 'Scanning document graph & vector index...'})}\n\n"
-        await asyncio.sleep(0.3)
+        await asyncio.sleep(0.2)
 
         # Event 2: Thinking Stage 2
         yield f"data: {json.dumps({'type': 'thinking', 'stage': 'Evaluating LangGraph state machine & extracted facts...'})}\n\n"
-        await asyncio.sleep(0.3)
+        await asyncio.sleep(0.2)
 
         # Execute chat turn
         result = await ChatEngine.process_user_chat(
@@ -102,12 +107,39 @@ async def stream_session_message(project_id: str, tree_id: str, q: str = Query(.
         for i in range(0, len(words), 3):
             chunk = " ".join(words[i:i+3]) + " "
             yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
-            await asyncio.sleep(0.04)
+            await asyncio.sleep(0.03)
 
         # Event 4: Final Event with citations & action payload
         yield f"data: {json.dumps({'type': 'done', 'assistant_node': result['assistant_node'], 'action_payload': result.get('action_payload')})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.post("/{tree_id}/convert-to-project")
+async def convert_session_to_project(project_id: str, tree_id: str, req: ConvertToProjectRequest):
+    """Convert an independent conversation session thread into a formal, named Project Workspace."""
+    state = ProjectService.get_project_state(project_id)
+    new_project_id = ProjectService.create_project(req.new_project_name, doc_folder=state.doc_folder)
+
+    new_state = ProjectService.get_project_state(new_project_id)
+    new_state.documents = state.documents
+    new_state.facts = state.facts
+    new_state.findings = state.findings
+    new_state.pending_findings = state.pending_findings
+    new_state.register = state.register
+
+    tree = await _session_manager.get_or_create_tree(tree_id, project_id)
+    tree.project_id = new_project_id
+    tree.title = req.new_project_name
+
+    return {
+        "status": "converted",
+        "old_project_id": project_id,
+        "new_project_id": new_project_id,
+        "project_name": req.new_project_name,
+        "documents_count": len(new_state.documents),
+        "facts_count": len(new_state.facts)
+    }
 
 
 @router.post("/{tree_id}/branch")
