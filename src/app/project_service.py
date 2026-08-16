@@ -1,8 +1,9 @@
 """Project Application Service for managing project lifecycle & pipeline execution."""
 
+import os
 from typing import Dict, Any, Optional
 from src.graph.state import PipelineState
-from src.graph.workflow import run_pipeline, build_documesh_graph
+from src.graph.workflow import run_pipeline
 from src.models.database import save_checkpoint, load_latest_checkpoint
 from src.logging_config import get_logger
 
@@ -19,11 +20,21 @@ class ProjectService:
     def create_project(project_name: str, doc_folder: Optional[str] = None, tenant_id: str = "tenant_default") -> str:
         """Create a new project workspace."""
         project_id = f"proj_{project_name.lower().replace(' ', '_')}"
-        folder = doc_folder or "/Users/souvikojha/doctask-souvik-ojha/test_data/greenfield_tech_park"
+
+        if not doc_folder:
+            # Create isolated empty folder for new workspace
+            folder = f"/tmp/documesh_projects/{project_id}"
+            os.makedirs(folder, exist_ok=True)
+        else:
+            folder = doc_folder
 
         state = PipelineState(
             project_id=project_id,
-            doc_folder=folder
+            doc_folder=folder,
+            documents=[],
+            facts=[],
+            findings=[],
+            pending_findings=[]
         )
         _ACTIVE_STATES[project_id] = state
         logger.info("project_created", project_id=project_id, doc_folder=folder, tenant_id=tenant_id)
@@ -43,9 +54,24 @@ class ProjectService:
             _ACTIVE_STATES[project_id] = state
             return state
 
-        # Default fallback
-        folder = "/Users/souvikojha/doctask-souvik-ojha/test_data/greenfield_tech_park"
-        state = run_pipeline(doc_folder=folder, project_id=project_id)
+        # If Seed Greenfield project, load seed corpus
+        if project_id in ["proj_greenfield_tech_park", "proj_live_demo", "proj_live_run_workspace"]:
+            folder = "/Users/souvikojha/doctask-souvik-ojha/test_data/greenfield_tech_park"
+            state = run_pipeline(doc_folder=folder, project_id=project_id)
+            _ACTIVE_STATES[project_id] = state
+            return state
+
+        # Fresh empty project workspace for new user sessions
+        folder = f"/tmp/documesh_projects/{project_id}"
+        os.makedirs(folder, exist_ok=True)
+        state = PipelineState(
+            project_id=project_id,
+            doc_folder=folder,
+            documents=[],
+            facts=[],
+            findings=[],
+            pending_findings=[]
+        )
         _ACTIVE_STATES[project_id] = state
         return state
 

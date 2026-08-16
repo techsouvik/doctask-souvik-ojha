@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DocuMesh AI — Minimalist Streaming Chat Engine</title>
+  <title>DocuMesh AI — Minimalist Chat Engine</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- FontAwesome Icons CDN -->
@@ -39,17 +39,17 @@
     const { useState, useEffect, useRef } = React;
 
     function App() {
-      const [projectId] = useState("proj_greenfield_tech_park");
+      const [projectId, setProjectId] = useState("proj_greenfield_tech_park");
       const [treeId, setTreeId] = useState("chat_session_main");
       const [sessions, setSessions] = useState([
-        { id: "chat_session_main", title: "Main Audit Thread" }
+        { id: "chat_session_main", projectId: "proj_greenfield_tech_park", title: "Greenfield Audit" }
       ]);
       const [documents, setDocuments] = useState([]);
       const [previewDoc, setPreviewDoc] = useState(null);
       const [chatMessages, setChatMessages] = useState([
         {
           role: "assistant",
-          content: "Hello! I am **DocuMesh AI**, your agentic document reconciliation assistant powered by LangGraph.\n\nI own the **Greenfield Tech Park** document pile (contracts, status reports, invoices, material receipts, correspondence).\n\nYou can upload new files using the **📎 attach button** below, or click **+ New Chat** in the sidebar to start a fresh thread!",
+          content: "Hello! I am **DocuMesh AI**, your agentic document reconciliation assistant powered by LangGraph.\n\nI own the **Greenfield Tech Park** document pile (contracts, status reports, invoices, material receipts, correspondence).\n\nYou can upload new files using the **📎 attach button** below, or click **+ New Chat** in the sidebar to start a fresh workspace!",
           action_payload: null
         }
       ]);
@@ -62,17 +62,18 @@
       const fileInputRef = useRef(null);
 
       useEffect(() => {
-        fetchDocuments();
+        fetchDocuments(projectId);
         fetchSessions();
-      }, []);
+      }, [projectId]);
 
       useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
       }, [chatMessages, loading, thinkingStage, uploading]);
 
-      const fetchDocuments = async () => {
+      const fetchDocuments = async (pId) => {
         try {
-          const res = await fetch(`/api/v1/projects/${projectId}/documents`);
+          const targetProj = pId || projectId;
+          const res = await fetch(`/api/v1/projects/${targetProj}/documents`);
           if (res.ok) {
             const data = await res.json();
             setDocuments(data.documents || []);
@@ -88,7 +89,7 @@
           if (res.ok) {
             const data = await res.json();
             if (data.sessions && data.sessions.length > 0) {
-              setSessions(data.sessions.map(s => ({ id: s.tree_id, title: s.title || s.tree_id })));
+              setSessions(data.sessions.map(s => ({ id: s.tree_id, projectId, title: s.title || s.tree_id })));
             }
           }
         } catch (e) {
@@ -96,17 +97,43 @@
         }
       };
 
-      const createNewChat = () => {
-        const newId = "chat_session_" + Date.now().toString().slice(-6);
-        setTreeId(newId);
-        setSessions(prev => [{ id: newId, title: "New Conversation" }, ...prev]);
-        setChatMessages([
-          {
-            role: "assistant",
-            content: "Started a fresh conversation session! Ask me anything about contracts, status reports, or run an analysis.",
-            action_payload: null
+      const createNewChat = async () => {
+        const stamp = Date.now().toString().slice(-6);
+        const newProjName = "workspace_" + stamp;
+        const newTreeId = "chat_session_" + stamp;
+
+        try {
+          // Create fresh empty workspace in backend
+          const res = await fetch(`/api/v1/projects`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ project_name: newProjName })
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            const newProjId = data.project_id;
+
+            setProjectId(newProjId);
+            setTreeId(newTreeId);
+            setDocuments([]);
+
+            setSessions(prev => [
+              { id: newTreeId, projectId: newProjId, title: "New Workspace " + stamp },
+              ...prev
+            ]);
+
+            setChatMessages([
+              {
+                role: "assistant",
+                content: `Started a **fresh, empty workspace** (\`${newProjId}\`)!\n\nNo documents uploaded yet. Upload your document files (\`.docx\`, \`.pdf\`, \`.txt\`) using the **📎 attach button** below or the **Upload** button in the sidebar to begin analysis!`,
+                action_payload: null
+              }
+            ]);
           }
-        ]);
+        } catch (e) {
+          console.error("Create project error", e);
+        }
       };
 
       const handleFileUpload = async (e) => {
@@ -128,9 +155,9 @@
               const data = await res.json();
               setChatMessages(prev => [...prev, {
                 role: "assistant",
-                content: `Uploaded and created Artifact **${data.filename || files[i].name}**!\n\n• Classified as: \`${data.doc_type || 'UNKNOWN'}\`\n• Extracted facts: **${data.facts_extracted || 0}**\n\nClick 'Run Document Pile Scan' below to reconcile this new artifact against the project register!`
+                content: `Uploaded and linked document **${data.filename || files[i].name}** to this workspace!\n\n• Classified as: \`${data.doc_type || 'UNKNOWN'}\`\n• Extracted facts: **${data.facts_extracted || 0}**\n\nAsk me any question about this document or click 'Run Document Pile Scan' below to reconcile!`
               }]);
-              fetchDocuments();
+              fetchDocuments(projectId);
             }
           } catch (e) {
             console.error("Upload Error", e);
@@ -140,10 +167,16 @@
         if (fileInputRef.current) fileInputRef.current.value = "";
       };
 
-      const switchSession = async (sId) => {
+      const switchSession = async (sess) => {
+        const sId = sess.id;
+        const pId = sess.projectId || projectId;
+
+        setProjectId(pId);
         setTreeId(sId);
+        fetchDocuments(pId);
+
         try {
-          const res = await fetch(`/api/v1/projects/${projectId}/sessions/${sId}`);
+          const res = await fetch(`/api/v1/projects/${pId}/sessions/${sId}`);
           if (res.ok) {
             const data = await res.json();
             if (data.thread && data.thread.length > 0) {
@@ -283,13 +316,13 @@
             {/* Conversation Threads Section */}
             <div class="p-4 border-b border-slate-800/80">
               <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
-                <i class="fa-solid fa-clock-rotate-left"></i> Past Conversations
+                <i class="fa-solid fa-clock-rotate-left"></i> Workspaces & Chats
               </h3>
               <div class="space-y-1.5 max-h-40 overflow-y-auto">
                 {sessions.map((s) => (
                   <button
                     key={s.id}
-                    onClick={() => switchSession(s.id)}
+                    onClick={() => switchSession(s)}
                     class={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition truncate flex items-center gap-2 ${treeId === s.id ? "bg-indigo-600/30 text-indigo-300 border border-indigo-500/40" : "text-slate-300 hover:bg-slate-800/60"}`}
                   >
                     <i class="fa-regular fa-message text-indigo-400 text-xs"></i>
@@ -303,7 +336,7 @@
             <div class="p-4 flex-1 overflow-y-auto">
               <div class="flex items-center justify-between mb-3">
                 <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-                  <i class="fa-solid fa-box-archive"></i> Document Artifacts ({documents.length})
+                  <i class="fa-solid fa-box-archive"></i> Linked Documents ({documents.length})
                 </h3>
                 <button
                   onClick={() => fileInputRef.current?.click()}
@@ -313,34 +346,40 @@
                 </button>
               </div>
 
-              <div class="space-y-2">
-                {documents.map((doc, idx) => {
-                  let docBadge = "bg-slate-800 text-slate-300";
-                  if (doc.filename.endsWith(".pdf")) docBadge = "bg-rose-950/80 text-rose-300 border border-rose-800/40";
-                  if (doc.filename.endsWith(".docx")) docBadge = "bg-sky-950/80 text-sky-300 border border-sky-800/40";
+              {documents.length === 0 ? (
+                <div class="p-4 text-center border border-dashed border-slate-800 rounded-xl text-slate-500 text-xs my-2">
+                  No documents in this workspace yet. Click Upload or Attach below!
+                </div>
+              ) : (
+                <div class="space-y-2">
+                  {documents.map((doc, idx) => {
+                    let docBadge = "bg-slate-800 text-slate-300";
+                    if (doc.filename.endsWith(".pdf")) docBadge = "bg-rose-950/80 text-rose-300 border border-rose-800/40";
+                    if (doc.filename.endsWith(".docx")) docBadge = "bg-sky-950/80 text-sky-300 border border-sky-800/40";
 
-                  return (
-                    <div
-                      key={idx}
-                      onClick={() => setPreviewDoc(doc)}
-                      class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs hover:border-indigo-500/50 cursor-pointer transition flex items-center justify-between"
-                    >
-                      <div class="truncate">
-                        <div class="font-semibold text-slate-200 truncate flex items-center gap-2">
-                          <span class={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${docBadge}`}>
-                            {doc.filename.split('.').pop().toUpperCase()}
-                          </span>
-                          <span class="truncate">{doc.filename}</span>
+                    return (
+                      <div
+                        key={idx}
+                        onClick={() => setPreviewDoc(doc)}
+                        class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs hover:border-indigo-500/50 cursor-pointer transition flex items-center justify-between"
+                      >
+                        <div class="truncate">
+                          <div class="font-semibold text-slate-200 truncate flex items-center gap-2">
+                            <span class={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${docBadge}`}>
+                              {doc.filename.split('.').pop().toUpperCase()}
+                            </span>
+                            <span class="truncate">{doc.filename}</span>
+                          </div>
+                          <div class="text-[10px] text-slate-500 mt-1 font-mono">
+                            {doc.doc_type} • {doc.chunks ? doc.chunks.length : 1} Chunks
+                          </div>
                         </div>
-                        <div class="text-[10px] text-slate-500 mt-1 font-mono">
-                          {doc.doc_type} • {doc.chunks ? doc.chunks.length : 1} Chunks
-                        </div>
+                        <i class="fa-solid fa-chevron-right text-slate-600 text-xs"></i>
                       </div>
-                      <i class="fa-solid fa-chevron-right text-slate-600 text-xs"></i>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Features Brief Footer */}
@@ -366,7 +405,7 @@
                   <h1 class="text-base font-bold text-slate-100 flex items-center gap-2">
                     <i class="fa-solid fa-robot text-indigo-400"></i> DocuMesh AI Chat
                   </h1>
-                  <p class="text-xs text-slate-400">Project Workspace: <span class="font-mono text-indigo-300">proj_greenfield_tech_park</span></p>
+                  <p class="text-xs text-slate-400">Active Workspace: <span class="font-mono text-indigo-300">{projectId}</span></p>
                 </div>
               </div>
 
