@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DocuMesh AI — Minimalist Chat Engine</title>
+  <title>DocuMesh AI — Agentic Document Reconciliation</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- FontAwesome Icons CDN -->
@@ -47,11 +47,12 @@
       const [documents, setDocuments] = useState([]);
       const [previewDoc, setPreviewDoc] = useState(null);
       const [convertModalOpen, setConvertModalOpen] = useState(false);
+      const [premiumModalOpen, setPremiumModalOpen] = useState(false);
       const [newProjectNameInput, setNewProjectNameInput] = useState("");
       const [chatMessages, setChatMessages] = useState([
         {
           role: "assistant",
-          content: "Hello! I am **DocuMesh AI**, your agentic document reconciliation assistant powered by LangGraph.\n\nI own the **Greenfield Tech Park** document pile (contracts, status reports, invoices, material receipts, correspondence).\n\nYou can start an **independent conversation**, upload files using **📎 Attach**, or click **📌 Convert to Project** to promote this chat into a formal named Project Workspace!",
+          content: "Welcome to **DocuMesh AI**! 👋\n\nPlease upload or attach your document files (`.docx`, `.pdf`, `.txt`) using the **📎 attach button** below to start analysis.",
           action_payload: null
         }
       ]);
@@ -120,14 +121,14 @@
             setDocuments([]);
 
             setSessions(prev => [
-              { id: newTreeId, projectId: newProjId, title: "New Conversation " + stamp },
+              { id: newTreeId, projectId: newProjId, title: "New Workspace " + stamp },
               ...prev
             ]);
 
             setChatMessages([
               {
                 role: "assistant",
-                content: `Started an **independent conversation** (\`${newProjId}\`)!\n\nNo documents uploaded yet. Upload your document files (\`.docx\`, \`.pdf\`, \`.txt\`) using the **📎 attach button** below or click **📌 Convert to Project** to save as a named project!`,
+                content: `Started a **fresh, empty workspace** (\`${newProjId}\`)!\n\nPlease upload or attach your document files (\`.docx\`, \`.pdf\`, \`.txt\`) using the **📎 attach button** below to start analysis.`,
                 action_payload: null
               }
             ]);
@@ -183,7 +184,7 @@
               const data = await res.json();
               setChatMessages(prev => [...prev, {
                 role: "assistant",
-                content: `Uploaded and linked document **${data.filename || files[i].name}** to this workspace!\n\n• Classified as: \`${data.doc_type || 'UNKNOWN'}\`\n• Extracted facts: **${data.facts_extracted || 0}**\n\nAsk me any question about this document or click 'Run Document Pile Scan' below to reconcile!`
+                content: `Uploaded and linked document **${data.filename || files[i].name}**!\n\n• Classified as: \`${data.doc_type || 'UNKNOWN'}\`\n• Extracted facts: **${data.facts_extracted || 0}**\n\nI have received your document. Ask me any question about it or type 'run analysis' to reconcile!`
               }]);
               fetchDocuments(projectId);
             }
@@ -296,15 +297,6 @@
         return { __html: text };
       };
 
-      const quickChips = [
-        { label: "▶ Run Document Pile Scan", action: "Run full document analysis" },
-        { label: "🚨 Show Discrepancy Findings", action: "Show findings" },
-        { label: "✅ Approve All Findings", action: "Approve all findings" },
-        { label: "📊 Show Reconciled Register", action: "Show register" },
-        { label: "⚖️ What is the penalty clause?", action: "What is the penalty clause rate?" },
-        { label: "💳 Explain invoice discrepancy", action: "Tell me about the invoice discrepancy" }
-      ];
-
       return (
         <div class="flex h-screen overflow-hidden">
           {/* Hidden File Input */}
@@ -366,7 +358,7 @@
                 </h3>
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-[11px] rounded-lg transition flex items-center gap-1.5 shadow"
+                  class="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] rounded-lg transition flex items-center gap-1.5 shadow"
                 >
                   <i class="fa-solid fa-cloud-arrow-up"></i> Upload
                 </button>
@@ -374,7 +366,7 @@
 
               {documents.length === 0 ? (
                 <div class="p-4 text-center border border-dashed border-slate-800 rounded-xl text-slate-500 text-xs my-2">
-                  No documents in this workspace yet. Click Upload or Attach below!
+                  No documents uploaded yet. Click Upload or Attach below to add files!
                 </div>
               ) : (
                 <div class="space-y-2">
@@ -408,18 +400,23 @@
               )}
             </div>
 
-            {/* Features Brief Footer */}
+            {/* Premium Features Brief Footer */}
             <div class="p-4 border-t border-slate-800 text-[11px] text-slate-400 space-y-1">
-              <div class="font-bold text-slate-300 mb-1">DocuMesh Engine Brief:</div>
+              <button
+                onClick={() => setPremiumModalOpen(true)}
+                class="w-full py-2 bg-gradient-to-r from-amber-500/20 via-purple-500/20 to-indigo-500/20 border border-amber-500/30 text-amber-300 font-bold rounded-lg transition hover:border-amber-400 flex items-center justify-center gap-2 mb-2"
+              >
+                <i class="fa-solid fa-wand-magic-sparkles text-amber-400"></i> ✨ Premium AI Features
+              </button>
               <div>• SSE Streaming AI Reasoning</div>
-              <div>• 7-Stage LangGraph State Machine</div>
               <div>• Multi-Provider LLM (OpenAI, Claude, Gemini)</div>
+              <div>• 7-Stage LangGraph State Machine</div>
             </div>
           </aside>
 
           {/* MAIN CHAT AREA */}
           <main class="flex-1 flex flex-col h-screen overflow-hidden">
-            {/* Top Bar with Convert to Project Button */}
+            {/* Top Bar */}
             <header class="p-4 border-b border-slate-800 flex items-center justify-between glass-panel">
               <div class="flex items-center gap-3">
                 {!sidebarOpen && (
@@ -437,9 +434,14 @@
 
               <div class="flex items-center gap-2">
                 <button
+                  onClick={() => setPremiumModalOpen(true)}
+                  class="px-3 py-1.5 text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-lg transition hover:bg-amber-500/30 flex items-center gap-1.5 shadow"
+                >
+                  <i class="fa-solid fa-wand-magic-sparkles text-amber-400"></i> Premium
+                </button>
+                <button
                   onClick={() => setConvertModalOpen(true)}
                   class="px-3 py-1.5 text-xs font-semibold bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 rounded-lg transition border border-emerald-500/40 flex items-center gap-1.5"
-                  title="Promote this chat session into a named Project Workspace"
                 >
                   <i class="fa-solid fa-bookmark"></i> Convert to Project
                 </button>
@@ -559,19 +561,6 @@
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Quick Suggestion Chips */}
-            <div class="px-6 py-2 flex items-center gap-2 overflow-x-auto no-scrollbar">
-              {quickChips.map((chip, cIdx) => (
-                <button
-                  key={cIdx}
-                  onClick={() => sendStreamingMessage(chip.action)}
-                  class="px-3 py-1.5 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs border border-slate-800 hover:border-indigo-500/50 transition whitespace-nowrap"
-                >
-                  {chip.label}
-                </button>
-              ))}
-            </div>
-
             {/* Chat Input Bar */}
             <form onSubmit={(e) => { e.preventDefault(); sendStreamingMessage(); }} class="p-6 pt-2 flex gap-3">
               <button
@@ -586,7 +575,7 @@
                 type="text"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Ask anything or type 'run analysis'..."
+                placeholder="Ask anything or attach document files..."
                 class="flex-1 px-5 py-3.5 bg-slate-900 border border-slate-800 rounded-2xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition shadow-inner"
               />
               <button
@@ -618,6 +607,48 @@
                 <div class="flex justify-end">
                   <button onClick={() => setPreviewDoc(null)} class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg">
                     Close Preview
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* PREMIUM FEATURES MODAL */}
+          {premiumModalOpen && (
+            <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6 z-50">
+              <div class="glass-panel p-6 rounded-2xl max-w-lg w-full border border-amber-500/40 shadow-2xl">
+                <div class="flex justify-between items-center pb-4 border-b border-slate-800">
+                  <h3 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                    <i class="fa-solid fa-wand-magic-sparkles text-amber-400"></i> ✨ DocuMesh Premium AI Suite
+                  </h3>
+                  <button onClick={() => setPremiumModalOpen(false)} class="text-slate-400 hover:text-slate-200">
+                    <i class="fa-solid fa-xmark"></i>
+                  </button>
+                </div>
+                <div class="my-4 space-y-3 text-xs text-slate-300">
+                  <div class="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                    <strong class="text-amber-300 font-bold block mb-1">🤖 Multi-Provider LLM Engine</strong>
+                    Connect OpenAI (`gpt-4o`), Anthropic Claude (`claude-3-5-sonnet`), Google Gemini (`gemini-1.5-pro`), or any custom OpenAI-compatible endpoint (`OPENAI_BASE_URL`).
+                  </div>
+                  <div class="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                    <strong class="text-indigo-300 font-bold block mb-1">🚀 SuperDocs High-Precision Parsing</strong>
+                    Integrated SuperDocs API client (`SuperDocsClient`) for complex PDF/DOCX structural chunking and free PDF/DOCX export rendering.
+                  </div>
+                  <div class="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                    <strong class="text-emerald-300 font-bold block mb-1">⏪ LangGraph v1.2 Time Travel Rewind</strong>
+                    Rewind graph state to any prior node (`/api/v1/projects/{id}/rewind`) and re-branch graph execution.
+                  </div>
+                  <div class="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                    <strong class="text-purple-300 font-bold block mb-1">📊 Automated Prompt Evals & Optimizer</strong>
+                    Run prompt evaluation benchmarks (`/api/v1/evals/run`) to score Faithfulness, Recall, and Security Injection Resistance.
+                  </div>
+                </div>
+                <div class="flex justify-end pt-2 border-t border-slate-800">
+                  <button
+                    onClick={() => setPremiumModalOpen(false)}
+                    class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow transition"
+                  >
+                    Close Premium View
                   </button>
                 </div>
               </div>
