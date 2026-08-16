@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DocuMesh AI — Agentic Document Reconciliation</title>
+  <title>DocuMesh AI — Conversational Reconciliation Engine</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- FontAwesome Icons CDN -->
@@ -41,18 +41,23 @@
     function App() {
       const [projectId, setProjectId] = useState("proj_greenfield_tech_park");
       const [treeId, setTreeId] = useState("chat_session_main");
+      const [pipelineStatus, setPipelineStatus] = useState("AWAITING_HUMAN_GATE");
+      const [currentNode, setCurrentNode] = useState("GATE");
       const [sessions, setSessions] = useState([
         { id: "chat_session_main", projectId: "proj_greenfield_tech_park", title: "Greenfield Audit" }
       ]);
       const [documents, setDocuments] = useState([]);
       const [previewDoc, setPreviewDoc] = useState(null);
       const [convertModalOpen, setConvertModalOpen] = useState(false);
-      const [premiumModalOpen, setPremiumModalOpen] = useState(false);
+      const [timeTravelModalOpen, setTimeTravelModalOpen] = useState(false);
+      const [evalsModalOpen, setEvalsModalOpen] = useState(false);
+      const [llmModalOpen, setLlmModalOpen] = useState(false);
       const [newProjectNameInput, setNewProjectNameInput] = useState("");
+      
       const [chatMessages, setChatMessages] = useState([
         {
           role: "assistant",
-          content: "Welcome to **DocuMesh AI**! 👋\n\nPlease upload or attach your document files (`.docx`, `.pdf`, `.txt`) using the **📎 attach button** below to start analysis.",
+          content: "Welcome to **DocuMesh AI**! 👋\n\n**Step 1:** Upload your document files (`.docx`, `.pdf`, `.txt`) using the **📎 attach button** below.\n\nOnce uploaded, I will automatically trigger the **7-stage LangGraph state machine** and show interactive widgets in this chat for review & approval!",
           action_payload: null
         }
       ]);
@@ -65,6 +70,7 @@
       const fileInputRef = useRef(null);
 
       useEffect(() => {
+        fetchStatus(projectId);
         fetchDocuments(projectId);
         fetchSessions();
       }, [projectId]);
@@ -72,6 +78,20 @@
       useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
       }, [chatMessages, loading, thinkingStage, uploading]);
+
+      const fetchStatus = async (pId) => {
+        try {
+          const targetProj = pId || projectId;
+          const res = await fetch(`/api/v1/projects/${targetProj}/status`);
+          if (res.ok) {
+            const data = await res.json();
+            setPipelineStatus(data.status);
+            setCurrentNode(data.current_node);
+          }
+        } catch (e) {
+          console.error("Status fetch error", e);
+        }
+      };
 
       const fetchDocuments = async (pId) => {
         try {
@@ -119,6 +139,8 @@
             setProjectId(newProjId);
             setTreeId(newTreeId);
             setDocuments([]);
+            setCurrentNode("INIT");
+            setPipelineStatus("CREATED");
 
             setSessions(prev => [
               { id: newTreeId, projectId: newProjId, title: "New Workspace " + stamp },
@@ -128,7 +150,7 @@
             setChatMessages([
               {
                 role: "assistant",
-                content: `Started a **fresh, empty workspace** (\`${newProjId}\`)!\n\nPlease upload or attach your document files (\`.docx\`, \`.pdf\`, \`.txt\`) using the **📎 attach button** below to start analysis.`,
+                content: `Started a **fresh, empty workspace** (\`${newProjId}\`)!\n\n**Step 1:** Upload your document files (\`.docx\`, \`.pdf\`, \`.txt\`) using the **📎 attach button** below to begin analysis.`,
                 action_payload: null
               }
             ]);
@@ -184,9 +206,10 @@
               const data = await res.json();
               setChatMessages(prev => [...prev, {
                 role: "assistant",
-                content: `Uploaded and linked document **${data.filename || files[i].name}**!\n\n• Classified as: \`${data.doc_type || 'UNKNOWN'}\`\n• Extracted facts: **${data.facts_extracted || 0}**\n\nI have received your document. Ask me any question about it or type 'run analysis' to reconcile!`
+                content: `Uploaded and linked document **${data.filename || files[i].name}**!\n\n• Classified as: \`${data.doc_type || 'UNKNOWN'}\`\n• Extracted facts: **${data.facts_extracted || 0}**\n\nI have received your document. Ask me any question about it or click 'Run Document Pile Scan' below to reconcile!`
               }]);
               fetchDocuments(projectId);
+              fetchStatus(projectId);
             }
           } catch (e) {
             console.error("Upload Error", e);
@@ -203,6 +226,7 @@
         setProjectId(pId);
         setTreeId(sId);
         fetchDocuments(pId);
+        fetchStatus(pId);
 
         try {
           const res = await fetch(`/api/v1/projects/${pId}/sessions/${sId}`);
@@ -261,6 +285,7 @@
               eventSource.close();
               setLoading(false);
               fetchSessions();
+              fetchStatus(projectId);
             }
           } catch (e) {
             console.error("SSE parse error", e);
@@ -296,6 +321,16 @@
         }
         return { __html: text };
       };
+
+      const stages = [
+        { id: "INGEST", label: "1. Ingest" },
+        { id: "CLASSIFY", label: "2. Classify" },
+        { id: "EXTRACT", label: "3. Extract" },
+        { id: "RECONCILE", label: "4. Reconcile" },
+        { id: "EXAMINE", label: "5. Examine" },
+        { id: "GATE", label: "6. Gate" },
+        { id: "DELIVER", label: "7. Deliver" }
+      ];
 
       return (
         <div class="flex h-screen overflow-hidden">
@@ -366,7 +401,7 @@
 
               {documents.length === 0 ? (
                 <div class="p-4 text-center border border-dashed border-slate-800 rounded-xl text-slate-500 text-xs my-2">
-                  No documents uploaded yet. Click Upload or Attach below to add files!
+                  No documents uploaded yet. Upload files to start!
                 </div>
               ) : (
                 <div class="space-y-2">
@@ -400,64 +435,85 @@
               )}
             </div>
 
-            {/* Premium Features Brief Footer */}
-            <div class="p-4 border-t border-slate-800 text-[11px] text-slate-400 space-y-1">
-              <button
-                onClick={() => setPremiumModalOpen(true)}
-                class="w-full py-2 bg-gradient-to-r from-amber-500/20 via-purple-500/20 to-indigo-500/20 border border-amber-500/30 text-amber-300 font-bold rounded-lg transition hover:border-amber-400 flex items-center justify-center gap-2 mb-2"
-              >
-                <i class="fa-solid fa-wand-magic-sparkles text-amber-400"></i> ✨ Premium AI Features
+            {/* Named Capabilities Toolbar Footer */}
+            <div class="p-4 border-t border-slate-800 text-[11px] text-slate-300 space-y-1.5">
+              <div class="font-bold text-slate-400 uppercase tracking-wider text-[10px] mb-2">Engine Capabilities</div>
+              <button onClick={() => setLlmModalOpen(true)} class="w-full text-left px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-indigo-300 font-semibold flex items-center gap-2">
+                <i class="fa-solid fa-brain text-indigo-400"></i> Multi-Model LLM Engine
               </button>
-              <div>• SSE Streaming AI Reasoning</div>
-              <div>• Multi-Provider LLM (OpenAI, Claude, Gemini)</div>
-              <div>• 7-Stage LangGraph State Machine</div>
+              <button onClick={() => setTimeTravelModalOpen(true)} class="w-full text-left px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-emerald-300 font-semibold flex items-center gap-2">
+                <i class="fa-solid fa-clock-rotate-left text-emerald-400"></i> Time Travel State Rewind
+              </button>
+              <button onClick={() => setEvalsModalOpen(true)} class="w-full text-left px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-purple-300 font-semibold flex items-center gap-2">
+                <i class="fa-solid fa-chart-line text-purple-400"></i> Automated Prompt Evals
+              </button>
             </div>
           </aside>
 
           {/* MAIN CHAT AREA */}
           <main class="flex-1 flex flex-col h-screen overflow-hidden">
-            {/* Top Bar */}
-            <header class="p-4 border-b border-slate-800 flex items-center justify-between glass-panel">
-              <div class="flex items-center gap-3">
-                {!sidebarOpen && (
-                  <button onClick={() => setSidebarOpen(true)} class="p-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition">
-                    <i class="fa-solid fa-bars"></i>
+            {/* Top Bar with 7-Stage State Machine Stepper Widget */}
+            <header class="p-4 border-b border-slate-800 flex flex-col gap-3 glass-panel">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  {!sidebarOpen && (
+                    <button onClick={() => setSidebarOpen(true)} class="p-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition">
+                      <i class="fa-solid fa-bars"></i>
+                    </button>
+                  )}
+                  <div>
+                    <h1 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                      <i class="fa-solid fa-robot text-indigo-400"></i> DocuMesh AI Chat
+                    </h1>
+                    <p class="text-xs text-slate-400">Active Workspace: <span class="font-mono text-indigo-300">{projectId}</span></p>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                  <button
+                    onClick={() => setConvertModalOpen(true)}
+                    class="px-3 py-1.5 text-xs font-semibold bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 rounded-lg transition border border-emerald-500/40 flex items-center gap-1.5"
+                  >
+                    <i class="fa-solid fa-bookmark"></i> Convert to Project
                   </button>
-                )}
-                <div>
-                  <h1 class="text-base font-bold text-slate-100 flex items-center gap-2">
-                    <i class="fa-solid fa-robot text-indigo-400"></i> DocuMesh AI Chat
-                  </h1>
-                  <p class="text-xs text-slate-400">Workspace: <span class="font-mono text-indigo-300">{projectId}</span></p>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    class="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition shadow flex items-center gap-1.5"
+                  >
+                    <i class="fa-solid fa-paperclip"></i> Upload Document
+                  </button>
+                  <a
+                    href={`/api/v1/projects/${projectId}/export-report`}
+                    target="_blank"
+                    class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition flex items-center gap-1.5"
+                  >
+                    <i class="fa-solid fa-file-pdf"></i> Export Report
+                  </a>
                 </div>
               </div>
 
-              <div class="flex items-center gap-2">
-                <button
-                  onClick={() => setPremiumModalOpen(true)}
-                  class="px-3 py-1.5 text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-lg transition hover:bg-amber-500/30 flex items-center gap-1.5 shadow"
-                >
-                  <i class="fa-solid fa-wand-magic-sparkles text-amber-400"></i> Premium
-                </button>
-                <button
-                  onClick={() => setConvertModalOpen(true)}
-                  class="px-3 py-1.5 text-xs font-semibold bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 rounded-lg transition border border-emerald-500/40 flex items-center gap-1.5"
-                >
-                  <i class="fa-solid fa-bookmark"></i> Convert to Project
-                </button>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition border border-slate-700 flex items-center gap-1.5"
-                >
-                  <i class="fa-solid fa-paperclip"></i> Attach File
-                </button>
-                <a
-                  href={`/api/v1/projects/${projectId}/export-report`}
-                  target="_blank"
-                  class="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition flex items-center gap-1.5 shadow"
-                >
-                  <i class="fa-solid fa-file-pdf"></i> Export Executive Report
-                </a>
+              {/* 7-Stage LangGraph State Machine Stepper Widget in Header */}
+              <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800/90">
+                <div class="flex justify-between items-center text-[11px] font-bold text-slate-400 mb-1.5">
+                  <span>LangGraph 7-Stage State Machine Status:</span>
+                  <span class="font-mono text-indigo-300">Status: {pipelineStatus}</span>
+                </div>
+                <div class="grid grid-cols-7 gap-1.5">
+                  {stages.map((stg, i) => {
+                    const isActive = currentNode === stg.id;
+                    const isPassed = ["DELIVER", "GATE_APPROVED", "COMPLETED"].includes(pipelineStatus) || (currentNode === "GATE" && i < 5);
+
+                    let badgeClass = "bg-slate-950 text-slate-500 border-slate-800";
+                    if (isActive) badgeClass = "bg-indigo-950 text-indigo-300 border-indigo-500 ring-2 ring-indigo-500/30";
+                    else if (isPassed) badgeClass = "bg-emerald-950/60 text-emerald-400 border-emerald-500/40";
+
+                    return (
+                      <div key={stg.id} class={`p-1.5 rounded-lg border text-center text-[10px] font-bold truncate transition ${badgeClass}`}>
+                        {stg.label}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </header>
 
@@ -575,7 +631,7 @@
                 type="text"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Ask anything or attach document files..."
+                placeholder="Ask anything, type 'run analysis', or attach document files..."
                 class="flex-1 px-5 py-3.5 bg-slate-900 border border-slate-800 rounded-2xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition shadow-inner"
               />
               <button
@@ -613,43 +669,67 @@
             </div>
           )}
 
-          {/* PREMIUM FEATURES MODAL */}
-          {premiumModalOpen && (
+          {/* MULTI-MODEL LLM MODAL */}
+          {llmModalOpen && (
             <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6 z-50">
-              <div class="glass-panel p-6 rounded-2xl max-w-lg w-full border border-amber-500/40 shadow-2xl">
+              <div class="glass-panel p-6 rounded-2xl max-w-md w-full border border-indigo-500/40 shadow-2xl">
                 <div class="flex justify-between items-center pb-4 border-b border-slate-800">
                   <h3 class="text-base font-bold text-slate-100 flex items-center gap-2">
-                    <i class="fa-solid fa-wand-magic-sparkles text-amber-400"></i> ✨ DocuMesh Premium AI Suite
+                    <i class="fa-solid fa-brain text-indigo-400"></i> Multi-Model LLM Config
                   </h3>
-                  <button onClick={() => setPremiumModalOpen(false)} class="text-slate-400 hover:text-slate-200">
+                  <button onClick={() => setLlmModalOpen(false)} class="text-slate-400 hover:text-slate-200">
                     <i class="fa-solid fa-xmark"></i>
                   </button>
                 </div>
                 <div class="my-4 space-y-3 text-xs text-slate-300">
-                  <div class="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                    <strong class="text-amber-300 font-bold block mb-1">🤖 Multi-Provider LLM Engine</strong>
-                    Connect OpenAI (`gpt-4o`), Anthropic Claude (`claude-3-5-sonnet`), Google Gemini (`gemini-1.5-pro`), or any custom OpenAI-compatible endpoint (`OPENAI_BASE_URL`).
-                  </div>
-                  <div class="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                    <strong class="text-indigo-300 font-bold block mb-1">🚀 SuperDocs High-Precision Parsing</strong>
-                    Integrated SuperDocs API client (`SuperDocsClient`) for complex PDF/DOCX structural chunking and free PDF/DOCX export rendering.
-                  </div>
-                  <div class="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                    <strong class="text-emerald-300 font-bold block mb-1">⏪ LangGraph v1.2 Time Travel Rewind</strong>
-                    Rewind graph state to any prior node (`/api/v1/projects/{id}/rewind`) and re-branch graph execution.
-                  </div>
-                  <div class="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                    <strong class="text-purple-300 font-bold block mb-1">📊 Automated Prompt Evals & Optimizer</strong>
-                    Run prompt evaluation benchmarks (`/api/v1/evals/run`) to score Faithfulness, Recall, and Security Injection Resistance.
-                  </div>
+                  <p>Supports native OpenAI (`gpt-4o`), Anthropic Claude (`3.5 Sonnet`), Google Gemini (`1.5 Pro`), and custom OpenAI-compatible endpoints (`OPENAI_BASE_URL` for Together, Ollama, OpenRouter, or vLLM).</p>
                 </div>
                 <div class="flex justify-end pt-2 border-t border-slate-800">
-                  <button
-                    onClick={() => setPremiumModalOpen(false)}
-                    class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow transition"
-                  >
-                    Close Premium View
+                  <button onClick={() => setLlmModalOpen(false)} class="px-4 py-2 bg-indigo-600 text-white font-bold text-xs rounded-lg">Close</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TIME TRAVEL MODAL */}
+          {timeTravelModalOpen && (
+            <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6 z-50">
+              <div class="glass-panel p-6 rounded-2xl max-w-md w-full border border-emerald-500/40 shadow-2xl">
+                <div class="flex justify-between items-center pb-4 border-b border-slate-800">
+                  <h3 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                    <i class="fa-solid fa-clock-rotate-left text-emerald-400"></i> LangGraph Time Travel
+                  </h3>
+                  <button onClick={() => setTimeTravelModalOpen(false)} class="text-slate-400 hover:text-slate-200">
+                    <i class="fa-solid fa-xmark"></i>
                   </button>
+                </div>
+                <div class="my-4 space-y-3 text-xs text-slate-300">
+                  <p>Rewind pipeline state machine back to any prior checkpoint node (`/api/v1/projects/{id}/rewind`) and re-branch graph execution!</p>
+                </div>
+                <div class="flex justify-end pt-2 border-t border-slate-800">
+                  <button onClick={() => setTimeTravelModalOpen(false)} class="px-4 py-2 bg-emerald-600 text-white font-bold text-xs rounded-lg">Close</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* EVALS MODAL */}
+          {evalsModalOpen && (
+            <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6 z-50">
+              <div class="glass-panel p-6 rounded-2xl max-w-md w-full border border-purple-500/40 shadow-2xl">
+                <div class="flex justify-between items-center pb-4 border-b border-slate-800">
+                  <h3 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                    <i class="fa-solid fa-chart-line text-purple-400"></i> Automated Prompt Evals
+                  </h3>
+                  <button onClick={() => setEvalsModalOpen(false)} class="text-slate-400 hover:text-slate-200">
+                    <i class="fa-solid fa-xmark"></i>
+                  </button>
+                </div>
+                <div class="my-4 space-y-3 text-xs text-slate-300">
+                  <p>Run prompt evaluation benchmark suite (`/api/v1/evals/run`) to score Faithfulness, Recall, and Prompt Injection Resistance across system prompt variants.</p>
+                </div>
+                <div class="flex justify-end pt-2 border-t border-slate-800">
+                  <button onClick={() => setEvalsModalOpen(false)} class="px-4 py-2 bg-purple-600 text-white font-bold text-xs rounded-lg">Close</button>
                 </div>
               </div>
             </div>
