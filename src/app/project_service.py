@@ -41,15 +41,15 @@ class ProjectService:
         return project_id
 
     @staticmethod
-    def get_project_state(project_id: str) -> PipelineState:
+    def get_project_state(project_id: str, tenant_id: str = "tenant_default") -> PipelineState:
         """Get or restore project pipeline state."""
         if project_id in _ACTIVE_STATES:
             return _ACTIVE_STATES[project_id]
 
         # Attempt restore from DB checkpoint
-        checkpoint = load_latest_checkpoint(project_id)
+        checkpoint = load_latest_checkpoint(project_id, tenant_id=tenant_id)
         if checkpoint:
-            logger.info("project_state_restored_from_checkpoint", project_id=project_id, node=checkpoint.get("current_node"))
+            logger.info("project_state_restored_from_checkpoint", project_id=project_id, tenant_id=tenant_id, node=checkpoint.get("current_node"))
             state = PipelineState(**checkpoint)
             _ACTIVE_STATES[project_id] = state
             return state
@@ -76,11 +76,25 @@ class ProjectService:
         return state
 
     @staticmethod
-    def run_pipeline_for_project(project_id: str, run_id: str = "run_latest") -> PipelineState:
-        """Trigger or resume pipeline state machine execution."""
-        state = ProjectService.get_project_state(project_id)
-        logger.info("triggering_pipeline_run", project_id=project_id, current_node=state.current_node)
+    def run_pipeline_for_project(project_id: str, run_id: str = "run_latest", tenant_id: str = "tenant_default") -> PipelineState:
+        """Trigger or resume pipeline state machine execution with distributed lock protection."""
+        from src.cache.redis_cache import cache_instance
+        
+        lock_key = f"pipeline:{tenant_id}:{project_id}"
+        acquired = cache_instance.acquire_lock(lock_key, ttl_seconds=60)
+        
+        try:
+            state = ProjectService.get_project_state(project_id, tenant_id=tenant_id)
+            logger.info("triggering_pipeline_run", project_id=project_id, tenant_id=tenant_id, current_node=state.current_node)
 
-        updated_state = run_pipeline(doc_folder=state.doc_folder, project_id=project_id, run_id=run_id)
-        _ACTIVE_STATES[project_id] = updated_state
-        return updated_state
+            updated_state = run_pipeline(
+                doc_folder=state.doc_folder,
+                project_id=project_id,
+                run_id=run_id,
+                existing_state=state if state.documents else None
+            )
+            _ACTIVE_STATES[project_id] = updated_state
+            return updated_state
+        finally:
+            if acquired:
+                cache_instance.release_lock(lock_key)

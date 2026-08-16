@@ -11,7 +11,7 @@ from src.extraction.extractor import extract_facts
 from src.reconciliation.resolver import reconcile_facts
 from src.examination.engine import run_examination_pipeline
 from src.models.domain import FindingStatus, Finding, ExtractedFact
-from src.models.database import save_checkpoint
+from src.models.database import save_checkpoint, save_cached_facts_db, load_cached_facts_db
 from src.cache.redis_cache import cache_instance
 from src.logging_config import get_logger
 
@@ -34,9 +34,12 @@ def node_ingest(state: PipelineState) -> Dict[str, Any]:
                     if fname.startswith(".") or not fname.lower().endswith((".docx", ".pdf", ".txt")):
                         continue
                     fpath = os.path.join(root, fname)
-                    doc = ingest_file(fpath, state.project_id)
-                    if doc:
-                        documents.append(doc)
+                    try:
+                        doc = ingest_file(fpath, state.project_id)
+                        if doc:
+                            documents.append(doc)
+                    except Exception as e:
+                        logger.error("ingest_doc_failed_quarantined", file=fname, error=str(e))
 
     logger.info("ingest_completed", total_docs=len(documents))
     state.current_node = "INGEST"
@@ -54,8 +57,14 @@ def node_classify(state: PipelineState) -> Dict[str, Any]:
     classified_docs = []
 
     for doc in state.documents:
-        updated_doc = classify_document(doc)
-        classified_docs.append(updated_doc)
+        try:
+            updated_doc = classify_document(doc)
+            classified_docs.append(updated_doc)
+        except Exception as e:
+            logger.error("classify_doc_failed_quarantined", doc_id=doc.doc_id, error=str(e))
+            doc.quarantined = True
+            doc.quarantine_reason = f"Classification exception: {str(e)}"
+            classified_docs.append(doc)
 
     state.current_node = "CLASSIFY"
     save_checkpoint(state.project_id, "CLASSIFY", state.model_dump())
@@ -67,7 +76,7 @@ def node_classify(state: PipelineState) -> Dict[str, Any]:
 
 
 def node_extract(state: PipelineState) -> Dict[str, Any]:
-    """3. EXTRACT NODE: Extract facts from non-quarantined documents with quote grounding."""
+    """3. EXTRACT NODE: Multi-tiered cached extraction with crash-proof fault tolerance."""
     logger.info("node_start", node="EXTRACT", project_id=state.project_id)
     all_facts = []
 
@@ -75,13 +84,28 @@ def node_extract(state: PipelineState) -> Dict[str, Any]:
         if doc.quarantined:
             continue
 
+        # 1. Check Redis Cache
         cached_facts = cache_instance.get_cached_fact(doc.checksum)
+        
+        # 2. Check Persistent DB Cache
+        if not cached_facts:
+            cached_facts = load_cached_facts_db(state.project_id, doc.checksum)
+
         if cached_facts:
             logger.info("facts_cache_hit", filename=doc.filename, fact_count=len(cached_facts))
             facts = [ExtractedFact(**f) if isinstance(f, dict) else f for f in cached_facts]
         else:
-            facts = extract_facts(doc)
-            cache_instance.set_cached_fact(doc.checksum, [f.model_dump() for f in facts])
+            try:
+                facts = extract_facts(doc)
+                facts_dump = [f.model_dump() for f in facts]
+                # Save to both Redis and DB
+                cache_instance.set_cached_fact(doc.checksum, facts_dump)
+                save_cached_facts_db(state.project_id, doc.doc_id, doc.checksum, facts_dump)
+            except Exception as e:
+                logger.error("extract_doc_failed_quarantined", doc_id=doc.doc_id, error=str(e))
+                doc.quarantined = True
+                doc.quarantine_reason = f"Extraction failure: {str(e)}"
+                continue
 
         all_facts.extend(facts)
 

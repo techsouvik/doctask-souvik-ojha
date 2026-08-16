@@ -164,40 +164,64 @@ def get_knowledge_graph(project_id: str):
     state = ProjectService.get_project_state(project_id)
     nodes = []
     edges = []
+    node_ids = set()
+
+    # Map both doc_id and filename to the node ID
+    doc_lookup = {}
 
     for doc in state.documents:
+        node_id = doc.doc_id or doc.filename
+        doc_lookup[doc.doc_id] = node_id
+        doc_lookup[doc.filename] = node_id
+        node_ids.add(node_id)
+
         nodes.append({
-            "id": doc.doc_id,
+            "id": node_id,
             "label": doc.filename,
             "type": "DOCUMENT",
-            "doc_type": doc.doc_type.value,
-            "status": "QUARANTINED" if doc.quarantined else "ACTIVE"
+            "group": "DOCUMENT",
+            "doc_type": doc.doc_type.value if hasattr(doc.doc_type, "value") else str(doc.doc_type),
+            "status": "QUARANTINED" if doc.quarantined else "ACTIVE",
+            "chunks_count": len(doc.chunks) if doc.chunks else 1
         })
 
     for f in state.findings:
         f_node_id = f.finding_id
+        node_ids.add(f_node_id)
         nodes.append({
             "id": f_node_id,
-            "label": f.title,
+            "label": f"[{f.finding_id}] {f.title[:30]}...",
+            "full_title": f.title,
             "type": "FINDING",
-            "severity": f.severity.value,
-            "status": f.status.value
+            "group": "FINDING",
+            "severity": f.severity.value if hasattr(f.severity, "value") else str(f.severity),
+            "status": f.status.value if hasattr(f.status, "value") else str(f.status),
+            "description": f.description,
+            "resolution_action": f.resolution_action
         })
 
-        if f.source_a and f.source_a.doc_id:
-            edges.append({
-                "source": f.source_a.doc_id,
-                "target": f_node_id,
-                "label": "SRC_A",
-                "is_conflict": True
-            })
+        # Resolve Source A edge
+        if f.source_a:
+            src_a_id = doc_lookup.get(f.source_a.doc_id) or doc_lookup.get(f.source_a.filename)
+            if src_a_id and src_a_id in node_ids:
+                edges.append({
+                    "from": src_a_id,
+                    "to": f_node_id,
+                    "label": "Source A",
+                    "is_conflict": True,
+                    "quote": f.source_a.exact_quote
+                })
 
-        if f.source_b and f.source_b.doc_id:
-            edges.append({
-                "source": f.source_b.doc_id,
-                "target": f_node_id,
-                "label": "SRC_B",
-                "is_conflict": True
-            })
+        # Resolve Source B edge
+        if f.source_b:
+            src_b_id = doc_lookup.get(f.source_b.doc_id) or doc_lookup.get(f.source_b.filename)
+            if src_b_id and src_b_id in node_ids:
+                edges.append({
+                    "from": src_b_id,
+                    "to": f_node_id,
+                    "label": "Contradicts",
+                    "is_conflict": True,
+                    "quote": f.source_b.exact_quote
+                })
 
     return {"project_id": project_id, "nodes": nodes, "edges": edges}

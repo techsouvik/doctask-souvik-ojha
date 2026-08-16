@@ -1,6 +1,6 @@
 """LangGraph Workflow definition and runner for DocuMesh."""
 
-from typing import Dict, Any, Literal
+from typing import Dict, Any, Literal, Optional
 from langgraph.graph import StateGraph, END
 from src.graph.state import PipelineState
 from src.graph.nodes import (
@@ -75,15 +75,21 @@ def build_documesh_graph():
 def run_pipeline(
     doc_folder: str = "/Users/souvikojha/doctask-souvik-ojha/test_data/greenfield_tech_park",
     project_id: str = "proj_greenfield_tech_park",
-    run_id: str = "run_001"
+    run_id: str = "run_001",
+    existing_state: Optional[PipelineState] = None
 ) -> PipelineState:
-    """Execute the pipeline from start to GATE/DELIVER."""
+    """Execute or resume the pipeline from start to GATE/DELIVER."""
     graph = build_documesh_graph()
-    initial_state = PipelineState(
-        project_id=project_id,
-        run_id=run_id,
-        doc_folder=doc_folder
-    )
+    
+    if existing_state is not None:
+        initial_state = existing_state
+        initial_state.run_id = run_id
+    else:
+        initial_state = PipelineState(
+            project_id=project_id,
+            run_id=run_id,
+            doc_folder=doc_folder
+        )
 
     final_state_dict = graph.invoke(initial_state)
     if isinstance(final_state_dict, dict):

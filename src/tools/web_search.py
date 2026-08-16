@@ -36,6 +36,9 @@ class AsyncWebSearchTools:
                             "snippet": snippet
                         })
         except Exception as e:
+            pass
+
+        if not results:
             # Fallback mock response for offline/network-constrained testing
             results.append({
                 "title": f"Fallback Search Result for: {query}",

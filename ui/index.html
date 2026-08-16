@@ -1,776 +1,1242 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DocuMesh AI — Conversational Reconciliation Engine</title>
+  <title>DocuMesh — Document Reconciliation & Audit Engine</title>
+  
+  <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome 6 Icons CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- FontAwesome Icons CDN -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            brand: {
+              500: '#6366f1',
+              600: '#4f46e5',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
   <!-- Marked.js Markdown Parser CDN -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <!-- React & ReactDOM CDN -->
-  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <!-- Vis.js Network Standalone for Rock-Solid Interactive Graphs -->
+  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+  <!-- React 18 & ReactDOM -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <!-- Babel for JSX -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
   <style>
-    .gradient-text {
-      background: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-    .glass-panel {
-      background: rgba(15, 23, 42, 0.85);
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+
+    /* Surface Styles */
+    .glass {
+      background: rgba(13, 19, 31, 0.85);
       backdrop-filter: blur(16px);
       border: 1px solid rgba(255, 255, 255, 0.08);
     }
-    .prose-dark p { margin-bottom: 0.5rem; }
-    .prose-dark ul { list-style-type: disc; padding-left: 1.25rem; margin-bottom: 0.5rem; }
-    .prose-dark strong { color: #f8fafc; font-weight: 700; }
-    .prose-dark code { background: rgba(255,255,255,0.1); padding: 0.1rem 0.3rem; border-radius: 0.25rem; font-family: monospace; }
+    .card-dark {
+      background: #0d1424;
+      border: 1px solid rgba(255, 255, 255, 0.07);
+    }
+    .card-dark:hover {
+      border-color: rgba(99, 102, 241, 0.3);
+    }
+
+    /* Markdown Prose */
+    .prose-custom p { margin-bottom: 0.6rem; line-height: 1.6; font-size: 0.875rem; }
+    .prose-custom p:last-child { margin-bottom: 0; }
+    .prose-custom ul { list-style-type: disc; padding-left: 1.2rem; margin-bottom: 0.6rem; }
+    .prose-custom ol { list-style-type: decimal; padding-left: 1.2rem; margin-bottom: 0.6rem; }
+    .prose-custom li { margin-bottom: 0.2rem; }
+    .prose-custom strong { color: #f8fafc; font-weight: 700; }
+    .prose-custom code { 
+      background: rgba(99, 102, 241, 0.15); 
+      color: #c7d2fe; 
+      padding: 0.15rem 0.35rem; 
+      border-radius: 0.3rem; 
+      font-family: 'JetBrains Mono', monospace; 
+      font-size: 0.82em; 
+    }
+
+    /* Animation */
+    @keyframes pulse-soft {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+    .animate-pulse-soft {
+      animation: pulse-soft 2s infinite ease-in-out;
+    }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 font-sans antialiased min-h-screen">
+<body class="bg-[#070a12] text-slate-100 font-sans antialiased h-screen overflow-hidden">
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect, useRef } = React;
+    const { useState, useEffect, useRef, useMemo } = React;
 
     function App() {
+      // Primary State
       const [projectId, setProjectId] = useState("proj_greenfield_tech_park");
-      const [treeId, setTreeId] = useState("chat_session_main");
+      const [activeTab, setActiveTab] = useState("chat"); // 'chat', 'findings', 'graph', 'register'
       const [pipelineStatus, setPipelineStatus] = useState("AWAITING_HUMAN_GATE");
       const [currentNode, setCurrentNode] = useState("GATE");
-      const [sessions, setSessions] = useState([
-        { id: "chat_session_main", projectId: "proj_greenfield_tech_park", title: "Greenfield Audit" }
-      ]);
+      const [pendingCount, setPendingCount] = useState(0);
+
+      // Data Collections
+      const [projectsList, setProjectsList] = useState(["proj_greenfield_tech_park"]);
       const [documents, setDocuments] = useState([]);
-      const [previewDoc, setPreviewDoc] = useState(null);
-      const [convertModalOpen, setConvertModalOpen] = useState(false);
-      const [timeTravelModalOpen, setTimeTravelModalOpen] = useState(false);
-      const [evalsModalOpen, setEvalsModalOpen] = useState(false);
-      const [llmModalOpen, setLlmModalOpen] = useState(false);
-      const [newProjectNameInput, setNewProjectNameInput] = useState("");
-      
+      const [findings, setFindings] = useState([]);
+      const [register, setRegister] = useState(null);
+      const [graphData, setGraphData] = useState({ nodes: [], edges: [] });
+      const [selectedDoc, setSelectedDoc] = useState(null);
+
+      // UI Controls
+      const [sidebarOpen, setSidebarOpen] = useState(true);
+      const [spotlightOpen, setSpotlightOpen] = useState(false);
+      const [spotlightQuery, setSpotlightQuery] = useState("");
+      const [spotlightResults, setSpotlightResults] = useState([]);
+      const [createModalOpen, setCreateModalOpen] = useState(false);
+      const [newProjName, setNewProjName] = useState("");
+      const [newDocPath, setNewDocPath] = useState("");
+      const [findingFilter, setFindingFilter] = useState("ALL"); // ALL, PENDING, APPROVED, REJECTED
+
+      // Chat State
       const [chatMessages, setChatMessages] = useState([
         {
+          id: "m_welcome",
           role: "assistant",
-          content: "Welcome to **DocuMesh AI**! 👋\n\n**Step 1:** Upload your document files (`.docx`, `.pdf`, `.txt`) using the **📎 attach button** below.\n\nOnce uploaded, I will automatically trigger the **7-stage LangGraph state machine** and show interactive widgets in this chat for review & approval!",
-          action_payload: null
+          content: "### Welcome to **DocuMesh** 👋\n\nI am your **Document Reconciliation Assistant**. I audit contracts, invoices, status reports, and receipts to identify discrepancies and build a verified Project Register.\n\n• Ask any question across the document pile.\n• When ready, start the reconciliation audit.\n• Press `Cmd+K` anytime to search chunks with sub-30ms hybrid search.",
+          action_payload: null,
+          citations: []
         }
       ]);
       const [chatInput, setChatInput] = useState("");
-      const [loading, setLoading] = useState(false);
-      const [thinkingStage, setThinkingStage] = useState("");
+      const [isStreaming, setIsStreaming] = useState(false);
+      const [thinkingMsg, setThinkingMsg] = useState("");
       const [uploading, setUploading] = useState(false);
-      const [sidebarOpen, setSidebarOpen] = useState(true);
+
+      // Notifications Toast
+      const [toast, setToast] = useState(null);
+      const showToast = (msg, type = "info") => {
+        setToast({ msg, type });
+        setTimeout(() => setToast(null), 3500);
+      };
+
+      // Refs
       const messagesEndRef = useRef(null);
       const fileInputRef = useRef(null);
+      const visContainerRef = useRef(null);
+      const visNetworkRef = useRef(null);
 
+      // Global Keyboard Shortcut (Cmd+K)
       useEffect(() => {
-        fetchStatus(projectId);
-        fetchDocuments(projectId);
-        fetchSessions();
+        const onKey = (e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+            e.preventDefault();
+            setSpotlightOpen(prev => !prev);
+          }
+          if (e.key === 'Escape') {
+            setSpotlightOpen(false);
+            setSelectedDoc(null);
+            setCreateModalOpen(false);
+          }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+      }, []);
+
+      // Load project data
+      useEffect(() => {
+        loadProject(projectId);
+        loadProjectsList();
       }, [projectId]);
 
+      // Scroll chat
       useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, [chatMessages, loading, thinkingStage, uploading]);
+        if (activeTab === "chat") {
+          messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        }
+      }, [chatMessages, isStreaming, thinkingMsg]);
 
-      const fetchStatus = async (pId) => {
+      const loadProjectsList = async () => {
         try {
-          const targetProj = pId || projectId;
-          const res = await fetch(`/api/v1/projects/${targetProj}/status`);
+          const res = await fetch("/api/v1/projects");
+          if (res.ok) {
+            const data = await res.json();
+            if (data.projects) setProjectsList(data.projects);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      };
+
+      const loadProject = async (pId) => {
+        const id = pId || projectId;
+        try {
+          // Status
+          const stRes = await fetch(`/api/v1/projects/${id}/status`);
+          if (stRes.ok) {
+            const stData = await stRes.json();
+            setPipelineStatus(stData.status);
+            setCurrentNode(stData.current_node);
+            setPendingCount(stData.pending_findings_count || 0);
+          }
+
+          // Documents
+          const docRes = await fetch(`/api/v1/projects/${id}/documents`);
+          if (docRes.ok) {
+            const docData = await docRes.json();
+            setDocuments(docData.documents || []);
+          }
+
+          // Findings
+          const fRes = await fetch(`/api/v1/projects/${id}/findings`);
+          if (fRes.ok) {
+            const fData = await fRes.json();
+            setFindings(fData.findings || []);
+          }
+
+          // Register
+          const rRes = await fetch(`/api/v1/projects/${id}/register`);
+          if (rRes.ok) {
+            const rData = await rRes.json();
+            setRegister(rData);
+          } else {
+            setRegister(null);
+          }
+
+          // Graph
+          const gRes = await fetch(`/api/v1/projects/${id}/graph`);
+          if (gRes.ok) {
+            const gData = await gRes.json();
+            setGraphData(gData);
+          }
+        } catch (e) {
+          console.error("Load project error", e);
+        }
+      };
+
+      // Trigger 7-Stage Pipeline Run
+      const runPipeline = async () => {
+        showToast("Running LangGraph reconciliation audit...", "info");
+        try {
+          const res = await fetch(`/api/v1/projects/${projectId}/run`, { method: "POST" });
           if (res.ok) {
             const data = await res.json();
             setPipelineStatus(data.status);
             setCurrentNode(data.current_node);
-          }
-        } catch (e) {
-          console.error("Status fetch error", e);
-        }
-      };
+            setPendingCount(data.pending_findings_count || 0);
+            showToast(`Audit complete: Paused at ${data.current_node}!`, "success");
+            loadProject(projectId);
 
-      const fetchDocuments = async (pId) => {
-        try {
-          const targetProj = pId || projectId;
-          const res = await fetch(`/api/v1/projects/${targetProj}/documents`);
-          if (res.ok) {
-            const data = await res.json();
-            setDocuments(data.documents || []);
-          }
-        } catch (e) {
-          console.error("Docs error", e);
-        }
-      };
-
-      const fetchSessions = async () => {
-        try {
-          const res = await fetch(`/api/v1/projects/${projectId}/sessions`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data.sessions && data.sessions.length > 0) {
-              setSessions(data.sessions.map(s => ({ id: s.tree_id, projectId, title: s.title || s.tree_id })));
-            }
-          }
-        } catch (e) {
-          console.error("Sessions error", e);
-        }
-      };
-
-      const createNewChat = async () => {
-        const stamp = Date.now().toString().slice(-6);
-        const newProjName = "workspace_" + stamp;
-        const newTreeId = "chat_session_" + stamp;
-
-        try {
-          const res = await fetch(`/api/v1/projects`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ project_name: newProjName })
-          });
-
-          if (res.ok) {
-            const data = await res.json();
-            const newProjId = data.project_id;
-
-            setProjectId(newProjId);
-            setTreeId(newTreeId);
-            setDocuments([]);
-            setCurrentNode("INIT");
-            setPipelineStatus("CREATED");
-
-            setSessions(prev => [
-              { id: newTreeId, projectId: newProjId, title: "New Workspace " + stamp },
-              ...prev
-            ]);
-
-            setChatMessages([
+            setChatMessages(prev => [
+              ...prev,
               {
+                id: "m_" + Date.now(),
                 role: "assistant",
-                content: `Started a **fresh, empty workspace** (\`${newProjId}\`)!\n\n**Step 1:** Upload your document files (\`.docx\`, \`.pdf\`, \`.txt\`) using the **📎 attach button** below to begin analysis.`,
-                action_payload: null
+                content: `### ⚡ Pipeline Execution Complete\n\n• **Processed Documents:** ${data.documents_count}\n• **Extracted Facts:** ${data.facts_count}\n• **Pending Discrepancies:** **${data.pending_findings_count}**\n\nThe engine is paused at the **Human Gate**. Click the button below to review and approve findings!`,
+                action_payload: {
+                  type: "GATE_FINDINGS",
+                  findings: findings
+                }
               }
             ]);
           }
         } catch (e) {
-          console.error("Create project error", e);
+          showToast("Pipeline run failed.", "error");
         }
       };
 
-      const convertToNamedProject = async () => {
-        if (!newProjectNameInput.trim()) return;
-
-        try {
-          const res = await fetch(`/api/v1/projects/${projectId}/sessions/${treeId}/convert-to-project`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ new_project_name: newProjectNameInput })
-          });
-
-          if (res.ok) {
-            const data = await res.json();
-            setProjectId(data.new_project_id);
-            setConvertModalOpen(false);
-
-            setSessions(prev => prev.map(s => s.id === treeId ? { ...s, projectId: data.new_project_id, title: data.project_name } : s));
-
-            setChatMessages(prev => [...prev, {
-              role: "assistant",
-              content: `🎉 Promoted this conversation into formal **Project Workspace: ${data.project_name}** (\`${data.new_project_id}\`)!\n\n• Linked Documents: **${data.documents_count}**\n• Extracted Facts: **${data.facts_count}**\n\nAll team members can now access, audit, and export this project workspace!`
-            }]);
-          }
-        } catch (e) {
-          console.error("Convert project error", e);
-        }
-      };
-
-      const handleFileUpload = async (e) => {
-        const files = e.target.files;
-        if (!files || files.length === 0) return;
-
-        setUploading(true);
-        for (let i = 0; i < files.length; i++) {
-          const formData = new FormData();
-          formData.append("file", files[i]);
-
-          try {
-            const res = await fetch(`/api/v1/projects/${projectId}/documents`, {
-              method: "POST",
-              body: formData
-            });
-
-            if (res.ok) {
-              const data = await res.json();
-              setChatMessages(prev => [...prev, {
-                role: "assistant",
-                content: `Uploaded and linked document **${data.filename || files[i].name}**!\n\n• Classified as: \`${data.doc_type || 'UNKNOWN'}\`\n• Extracted facts: **${data.facts_extracted || 0}**\n\nI have received your document. Ask me any question about it or click 'Run Document Pile Scan' below to reconcile!`
-              }]);
-              fetchDocuments(projectId);
-              fetchStatus(projectId);
-            }
-          } catch (e) {
-            console.error("Upload Error", e);
-          }
-        }
-        setUploading(false);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-      };
-
-      const switchSession = async (sess) => {
-        const sId = sess.id;
-        const pId = sess.projectId || projectId;
-
-        setProjectId(pId);
-        setTreeId(sId);
-        fetchDocuments(pId);
-        fetchStatus(pId);
-
-        try {
-          const res = await fetch(`/api/v1/projects/${pId}/sessions/${sId}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data.thread && data.thread.length > 0) {
-              setChatMessages(data.thread.map(n => ({
-                role: n.role,
-                content: n.content,
-                action_payload: n.metadata?.action_payload || null
-              })));
-            }
-          }
-        } catch (e) {
-          console.error("Switch session error", e);
-        }
-      };
-
-      const sendStreamingMessage = async (textToSend) => {
-        const query = textToSend || chatInput;
-        if (!query.trim()) return;
-
-        setChatInput("");
-        setChatMessages(prev => [...prev, { role: "user", content: query }]);
-        setLoading(true);
-        setThinkingStage("Scanning document graph...");
-
-        setChatMessages(prev => [...prev, { role: "assistant", content: "", action_payload: null }]);
-
-        const encodedQuery = encodeURIComponent(query);
-        const eventSource = new EventSource(`/api/v1/projects/${projectId}/sessions/${treeId}/stream?q=${encodedQuery}`);
-
-        let accumulatedContent = "";
-
-        eventSource.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-
-            if (data.type === "thinking") {
-              setThinkingStage(data.stage);
-            } else if (data.type === "chunk") {
-              setThinkingStage("");
-              accumulatedContent += data.content;
-              setChatMessages(prev => {
-                const updated = [...prev];
-                updated[updated.length - 1].content = accumulatedContent;
-                return updated;
-              });
-            } else if (data.type === "done") {
-              setThinkingStage("");
-              setChatMessages(prev => {
-                const updated = [...prev];
-                updated[updated.length - 1].action_payload = data.action_payload;
-                return updated;
-              });
-              eventSource.close();
-              setLoading(false);
-              fetchSessions();
-              fetchStatus(projectId);
-            }
-          } catch (e) {
-            console.error("SSE parse error", e);
-          }
-        };
-
-        eventSource.onerror = (err) => {
-          console.error("SSE stream error", err);
-          eventSource.close();
-          setLoading(false);
-          setThinkingStage("");
-        };
-      };
-
-      const handleApproveSingle = async (findingId) => {
+      // Approve / Reject Finding
+      const decideFinding = async (findingId, approved) => {
         try {
           const res = await fetch(`/api/v1/projects/${projectId}/findings/approve`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ finding_id: findingId, approved: true })
+            body: JSON.stringify({ finding_id: findingId, approved })
           });
           if (res.ok) {
-            sendStreamingMessage(`Approved finding ${findingId}. Update register!`);
+            showToast(`Finding ${findingId} ${approved ? 'Approved' : 'Rejected'}!`, approved ? "success" : "info");
+            loadProject(projectId);
           }
         } catch (e) {
-          console.error("Approve Error", e);
+          showToast("Decision failed", "error");
         }
       };
 
-      const renderMarkdown = (text) => {
-        if (typeof marked !== "undefined") {
-          return { __html: marked.parse(text || "") };
+      // Batch Approve All
+      const batchApproveAll = async () => {
+        try {
+          showToast("Batch approving all findings...", "info");
+          const res = await fetch(`/api/v1/projects/${projectId}/findings/batch-approve`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ approved_all: true })
+          });
+          if (res.ok) {
+            showToast("All findings approved! Register generated.", "success");
+            loadProject(projectId);
+            setActiveTab("register");
+          }
+        } catch (e) {
+          showToast("Batch approve failed", "error");
         }
-        return { __html: text };
       };
 
-      const stages = [
-        { id: "INGEST", label: "1. Ingest" },
-        { id: "CLASSIFY", label: "2. Classify" },
-        { id: "EXTRACT", label: "3. Extract" },
-        { id: "RECONCILE", label: "4. Reconcile" },
-        { id: "EXAMINE", label: "5. Examine" },
-        { id: "GATE", label: "6. Gate" },
-        { id: "DELIVER", label: "7. Deliver" }
-      ];
+      // File Upload
+      const onFileUpload = async (e) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+
+        setUploading(true);
+        showToast(`Uploading ${files.length} document(s)...`, "info");
+
+        for (let i = 0; i < files.length; i++) {
+          const form = new FormData();
+          form.append("file", files[i]);
+          try {
+            const res = await fetch(`/api/v1/projects/${projectId}/documents`, {
+              method: "POST",
+              body: form
+            });
+            if (res.ok) {
+              const data = await res.json();
+              showToast(`Ingested ${data.filename || files[i].name}`, "success");
+            }
+          } catch (err) {
+            showToast(`Upload failed for ${files[i].name}`, "error");
+          }
+        }
+
+        setUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        loadProject(projectId);
+      };
+
+      // Load Greenfield Demo Data into Empty Workspace
+      const loadDemoData = async () => {
+        showToast("Linking demo corpus...", "info");
+        try {
+          const res = await fetch("/api/v1/projects", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              project_name: "Greenfield Tech Park",
+              doc_folder: "/Users/souvikojha/doctask-souvik-ojha/test_data/greenfield_tech_park"
+            })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setProjectId(data.project_id);
+            setProjectsList(prev => Array.from(new Set([...prev, data.project_id])));
+            showToast("Demo corpus loaded!", "success");
+            loadProject(data.project_id);
+          }
+        } catch (e) {
+          showToast("Failed to load demo", "error");
+        }
+      };
+
+      // Send Message with SSE
+      const sendMessage = async (textToSend) => {
+        const query = textToSend || chatInput;
+        if (!query.trim()) return;
+
+        setChatInput("");
+        setChatMessages(prev => [...prev, { id: "u_" + Date.now(), role: "user", content: query }]);
+        setIsStreaming(true);
+        setThinkingMsg("Scanning document graph & vector chunks...");
+
+        const asstId = "a_" + Date.now();
+        setChatMessages(prev => [...prev, { id: asstId, role: "assistant", content: "", citations: [] }]);
+
+        const encoded = encodeURIComponent(query);
+        const eventSource = new EventSource(`/api/v1/projects/${projectId}/sessions/chat_session_main/stream?q=${encoded}`);
+
+        let contentAcc = "";
+
+        eventSource.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === "thinking") {
+              setThinkingMsg(data.stage);
+            } else if (data.type === "chunk") {
+              setThinkingMsg("");
+              contentAcc += data.content;
+              setChatMessages(prev => {
+                const next = [...prev];
+                const last = next[next.length - 1];
+                if (last && last.role === "assistant") last.content = contentAcc;
+                return next;
+              });
+            } else if (data.type === "done") {
+              setThinkingMsg("");
+              setChatMessages(prev => {
+                const next = [...prev];
+                const last = next[next.length - 1];
+                if (last && last.role === "assistant") {
+                  last.action_payload = data.action_payload;
+                  if (data.assistant_node?.citations) last.citations = data.assistant_node.citations;
+                }
+                return next;
+              });
+              eventSource.close();
+              setIsStreaming(false);
+              loadProject(projectId);
+            }
+          } catch (err) {
+            console.error(err);
+          }
+        };
+
+        eventSource.onerror = () => {
+          eventSource.close();
+          setIsStreaming(false);
+          setThinkingMsg("");
+        };
+      };
+
+      // Create Workspace
+      const handleCreateProject = async () => {
+        if (!newProjName.trim()) return;
+        try {
+          const res = await fetch("/api/v1/projects", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              project_name: newProjName,
+              doc_folder: newDocPath || null
+            })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setProjectId(data.project_id);
+            setProjectsList(prev => [...prev, data.project_id]);
+            setCreateModalOpen(false);
+            setNewProjName("");
+            setNewDocPath("");
+            showToast(`Created workspace: ${data.project_id}`, "success");
+            loadProject(data.project_id);
+          }
+        } catch (e) {
+          showToast("Failed to create project", "error");
+        }
+      };
+
+      // Spotlight Search
+      const handleSearch = async (q) => {
+        if (!q.trim()) {
+          setSpotlightResults([]);
+          return;
+        }
+        try {
+          const res = await fetch(`/api/v1/projects/${projectId}/search`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: q, top_k: 5 })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setSpotlightResults(data.results || []);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      };
+
+      // Interactive Knowledge Graph via Vis.js Network
+      useEffect(() => {
+        if (activeTab === "graph" && visContainerRef.current && graphData.nodes && graphData.nodes.length > 0) {
+          try {
+            // Build Vis.js Nodes
+            const visNodes = graphData.nodes.map(n => {
+              const isDoc = n.type === "DOCUMENT" || n.group === "DOCUMENT";
+              const isCrit = n.severity === "CRITICAL";
+
+              return {
+                id: n.id,
+                label: isDoc ? n.label : (n.label || n.id),
+                shape: isDoc ? "box" : "dot",
+                size: isDoc ? undefined : (isCrit ? 22 : 16),
+                color: isDoc ? {
+                  background: "#1e1b4b",
+                  border: "#6366f1",
+                  highlight: { background: "#312e81", border: "#a5b4fc" }
+                } : {
+                  background: isCrit ? "#ef4444" : "#f59e0b",
+                  border: isCrit ? "#b91c1c" : "#d97706",
+                  highlight: { background: "#f87171", border: "#fca5a5" }
+                },
+                font: {
+                  color: "#f8fafc",
+                  face: "Plus Jakarta Sans, sans-serif",
+                  size: isDoc ? 12 : 11,
+                  multi: true
+                },
+                margin: isDoc ? 10 : undefined,
+                borderWidth: 2,
+                shadow: { enabled: true, color: "rgba(0,0,0,0.5)", size: 6 }
+              };
+            });
+
+            // Build Vis.js Edges (Safe Check)
+            const validNodeIds = new Set(graphData.nodes.map(n => n.id));
+            const visEdges = (graphData.edges || [])
+              .filter(e => validNodeIds.has(e.from) && validNodeIds.has(e.to))
+              .map((e, idx) => ({
+                id: `edge_${idx}`,
+                from: e.from,
+                to: e.to,
+                label: e.label || "conflict",
+                color: { color: e.is_conflict ? "#ef4444" : "#64748b", highlight: "#f87171" },
+                arrows: { to: { enabled: true, scaleFactor: 0.75 } },
+                dashes: e.is_conflict,
+                width: 2,
+                font: { color: "#94a3b8", size: 10, face: "JetBrains Mono" }
+              }));
+
+            const data = {
+              nodes: new vis.DataSet(visNodes),
+              edges: new vis.DataSet(visEdges)
+            };
+
+            const options = {
+              physics: {
+                solver: "forceAtlas2Based",
+                forceAtlas2Based: {
+                  gravitationalConstant: -50,
+                  centralGravity: 0.01,
+                  springLength: 100,
+                  springConstant: 0.08
+                },
+                stabilization: { iterations: 150 }
+              },
+              interaction: {
+                hover: true,
+                zoomView: true,
+                dragView: true
+              }
+            };
+
+            if (visNetworkRef.current) {
+              visNetworkRef.current.destroy();
+            }
+
+            visNetworkRef.current = new vis.Network(visContainerRef.current, data, options);
+
+            visNetworkRef.current.on("click", (params) => {
+              if (params.nodes.length > 0) {
+                const clickedId = params.nodes[0];
+                const foundDoc = documents.find(d => (d.doc_id === clickedId || d.filename === clickedId));
+                if (foundDoc) setSelectedDoc(foundDoc);
+              }
+            });
+          } catch (err) {
+            console.error("Vis.js error", err);
+          }
+        }
+      }, [activeTab, graphData, documents]);
+
+      // Filtered findings
+      const filteredFindings = useMemo(() => {
+        if (findingFilter === "PENDING") return findings.filter(f => f.status === "PRESENTED");
+        if (findingFilter === "APPROVED") return findings.filter(f => f.status === "APPROVED");
+        if (findingFilter === "REJECTED") return findings.filter(f => f.status === "REJECTED");
+        return findings;
+      }, [findings, findingFilter]);
+
+      // Stage name helper
+      const getStageName = () => {
+        if (pipelineStatus === "AWAITING_HUMAN_GATE") return "Awaiting Gate Approval";
+        if (pipelineStatus === "COMPLETED" || pipelineStatus === "DELIVER") return "Reconciliation Completed";
+        if (currentNode === "INGEST") return "1/7 Ingesting Files";
+        if (currentNode === "CLASSIFY") return "2/7 Classifying Taxonomy";
+        if (currentNode === "EXTRACT") return "3/7 Extracting Facts";
+        if (currentNode === "RECONCILE") return "4/7 Cross-Doc Reconcile";
+        if (currentNode === "EXAMINE") return "5/7 Rule Engine Examination";
+        return pipelineStatus;
+      };
 
       return (
-        <div class="flex h-screen overflow-hidden">
+        <div class="flex h-screen w-screen overflow-hidden bg-[#070a12] text-slate-100 font-sans">
+          {/* Toast Alert */}
+          {toast && (
+            <div class={`fixed top-4 right-4 z-50 px-4 py-2.5 rounded-xl border text-xs font-semibold shadow-2xl flex items-center gap-2.5 transition ${
+              toast.type === 'success' ? 'bg-emerald-950/95 text-emerald-300 border-emerald-500/40' :
+              toast.type === 'error' ? 'bg-rose-950/95 text-rose-300 border-rose-500/40' :
+              'bg-slate-900/95 text-indigo-300 border-indigo-500/40'
+            }`}>
+              <i class={`fa-solid ${toast.type === 'success' ? 'fa-check' : toast.type === 'error' ? 'fa-xmark' : 'fa-info'} text-sm`}></i>
+              <span>{toast.msg}</span>
+            </div>
+          )}
+
           {/* Hidden File Input */}
           <input
             type="file"
             ref={fileInputRef}
-            onChange={handleFileUpload}
+            onChange={onFileUpload}
             multiple
             accept=".docx,.pdf,.txt,.xlsx,.csv"
             class="hidden"
           />
 
           {/* LEFT SIDEBAR */}
-          <aside class={`${sidebarOpen ? "w-80" : "w-0"} glass-panel border-r border-slate-800 flex flex-col transition-all duration-300 overflow-hidden`}>
-            <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+          <aside class={`${sidebarOpen ? "w-72" : "w-0"} glass border-r border-slate-800/80 flex flex-col transition-all duration-300 overflow-hidden shrink-0 z-20`}>
+            {/* Logo */}
+            <div class="p-4 border-b border-slate-800/80 flex items-center justify-between">
               <div class="flex items-center gap-2.5">
-                <i class="fa-solid fa-cube text-indigo-500 text-xl"></i>
-                <span class="font-bold text-sm gradient-text">DocuMesh Workspace</span>
+                <div class="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white text-xs font-bold shadow-lg shadow-indigo-600/30">
+                  <i class="fa-solid fa-cube"></i>
+                </div>
+                <span class="font-bold text-sm text-white tracking-tight">DocuMesh</span>
               </div>
-              <button onClick={() => setSidebarOpen(false)} class="text-slate-400 hover:text-slate-200">
-                <i class="fa-solid fa-xmark"></i>
+              <button onClick={() => setSidebarOpen(false)} class="text-slate-400 hover:text-white p-1">
+                <i class="fa-solid fa-chevron-left text-xs"></i>
               </button>
             </div>
 
-            {/* "+ New Conversation" Button */}
-            <div class="p-4 border-b border-slate-800">
-              <button
-                onClick={createNewChat}
-                class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition shadow flex items-center justify-center gap-2"
+            {/* Workspace Select */}
+            <div class="p-3 border-b border-slate-800/80 bg-slate-950/40">
+              <div class="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                <span>Active Workspace</span>
+                <button onClick={() => setCreateModalOpen(true)} class="text-indigo-400 hover:text-indigo-300">
+                  + New
+                </button>
+              </div>
+              <select
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+                class="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
               >
-                <i class="fa-solid fa-plus"></i> New Conversation
+                {projectsList.map(p => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Nav Tabs */}
+            <div class="p-3 border-b border-slate-800/80 space-y-1">
+              <button
+                onClick={() => setActiveTab("chat")}
+                class={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition ${
+                  activeTab === "chat" ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/30" : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/60"
+                }`}
+              >
+                <div class="flex items-center gap-2.5">
+                  <i class="fa-solid fa-message text-indigo-400"></i>
+                  <span>Assistant Chat</span>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setActiveTab("findings")}
+                class={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition ${
+                  activeTab === "findings" ? "bg-amber-600/20 text-amber-300 border border-amber-500/30" : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/60"
+                }`}
+              >
+                <div class="flex items-center gap-2.5">
+                  <i class="fa-solid fa-scale-balanced text-amber-400"></i>
+                  <span>Discrepancies (Gate)</span>
+                </div>
+                {pendingCount > 0 && (
+                  <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-slate-950">
+                    {pendingCount}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => setActiveTab("graph")}
+                class={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition ${
+                  activeTab === "graph" ? "bg-cyan-600/20 text-cyan-300 border border-cyan-500/30" : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/60"
+                }`}
+              >
+                <div class="flex items-center gap-2.5">
+                  <i class="fa-solid fa-circle-nodes text-cyan-400"></i>
+                  <span>Knowledge Graph</span>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setActiveTab("register")}
+                class={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition ${
+                  activeTab === "register" ? "bg-emerald-600/20 text-emerald-300 border border-emerald-500/30" : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/60"
+                }`}
+              >
+                <div class="flex items-center gap-2.5">
+                  <i class="fa-solid fa-table-list text-emerald-400"></i>
+                  <span>Project Register</span>
+                </div>
+                <span class={`text-[9px] font-bold px-1.5 py-0.5 rounded ${register ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-500'}`}>
+                  {register ? 'READY' : 'PENDING'}
+                </span>
               </button>
             </div>
 
-            {/* Independent Conversations List */}
-            <div class="p-4 border-b border-slate-800/80">
-              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
-                <i class="fa-solid fa-comments"></i> Conversations & Workspaces
-              </h3>
-              <div class="space-y-1.5 max-h-40 overflow-y-auto">
-                {sessions.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => switchSession(s)}
-                    class={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition truncate flex items-center gap-2 ${treeId === s.id ? "bg-indigo-600/30 text-indigo-300 border border-indigo-500/40" : "text-slate-300 hover:bg-slate-800/60"}`}
-                  >
-                    <i class="fa-regular fa-message text-indigo-400 text-xs"></i>
-                    <span class="truncate">{s.title}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Linked Documents Drawer */}
-            <div class="p-4 flex-1 overflow-y-auto">
-              <div class="flex items-center justify-between mb-3">
-                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-                  <i class="fa-solid fa-box-archive"></i> Linked Documents ({documents.length})
-                </h3>
+            {/* Document Pile */}
+            <div class="p-3 flex-1 overflow-y-auto">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Documents ({documents.length})
+                </span>
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  class="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] rounded-lg transition flex items-center gap-1.5 shadow"
+                  class="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-[10px] rounded transition flex items-center gap-1"
                 >
                   <i class="fa-solid fa-cloud-arrow-up"></i> Upload
                 </button>
               </div>
 
               {documents.length === 0 ? (
-                <div class="p-4 text-center border border-dashed border-slate-800 rounded-xl text-slate-500 text-xs my-2">
-                  No documents uploaded yet. Upload files to start!
+                <div class="p-4 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-xl my-2 space-y-2">
+                  <p>No documents uploaded yet.</p>
+                  <button
+                    onClick={loadDemoData}
+                    class="text-indigo-400 hover:text-indigo-300 text-[11px] underline block mx-auto"
+                  >
+                    Load Greenfield Demo
+                  </button>
                 </div>
               ) : (
-                <div class="space-y-2">
-                  {documents.map((doc, idx) => {
-                    let docBadge = "bg-slate-800 text-slate-300";
-                    if (doc.filename.endsWith(".pdf")) docBadge = "bg-rose-950/80 text-rose-300 border border-rose-800/40";
-                    if (doc.filename.endsWith(".docx")) docBadge = "bg-sky-950/80 text-sky-300 border border-sky-800/40";
-
-                    return (
-                      <div
-                        key={idx}
-                        onClick={() => setPreviewDoc(doc)}
-                        class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs hover:border-indigo-500/50 cursor-pointer transition flex items-center justify-between"
-                      >
-                        <div class="truncate">
-                          <div class="font-semibold text-slate-200 truncate flex items-center gap-2">
-                            <span class={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${docBadge}`}>
-                              {doc.filename.split('.').pop().toUpperCase()}
-                            </span>
-                            <span class="truncate">{doc.filename}</span>
-                          </div>
-                          <div class="text-[10px] text-slate-500 mt-1 font-mono">
-                            {doc.doc_type} • {doc.chunks ? doc.chunks.length : 1} Chunks
-                          </div>
-                        </div>
-                        <i class="fa-solid fa-chevron-right text-slate-600 text-xs"></i>
+                <div class="space-y-1.5">
+                  {documents.map((doc, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => setSelectedDoc(doc)}
+                      class="p-2 rounded-lg card-dark hover:border-indigo-500/50 cursor-pointer transition text-xs flex items-center justify-between group"
+                    >
+                      <div class="truncate mr-2">
+                        <div class="font-medium text-slate-200 truncate">{doc.filename}</div>
+                        <div class="text-[10px] text-slate-500 font-mono">{doc.doc_type}</div>
                       </div>
-                    );
-                  })}
+                      <i class="fa-solid fa-file-lines text-slate-600 group-hover:text-indigo-400 text-xs"></i>
+                    </div>
+                  ))}
                 </div>
               )}
-            </div>
-
-            {/* Named Capabilities Toolbar Footer */}
-            <div class="p-4 border-t border-slate-800 text-[11px] text-slate-300 space-y-1.5">
-              <div class="font-bold text-slate-400 uppercase tracking-wider text-[10px] mb-2">Engine Capabilities</div>
-              <button onClick={() => setLlmModalOpen(true)} class="w-full text-left px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-indigo-300 font-semibold flex items-center gap-2">
-                <i class="fa-solid fa-brain text-indigo-400"></i> Multi-Model LLM Engine
-              </button>
-              <button onClick={() => setTimeTravelModalOpen(true)} class="w-full text-left px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-emerald-300 font-semibold flex items-center gap-2">
-                <i class="fa-solid fa-clock-rotate-left text-emerald-400"></i> Time Travel State Rewind
-              </button>
-              <button onClick={() => setEvalsModalOpen(true)} class="w-full text-left px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-purple-300 font-semibold flex items-center gap-2">
-                <i class="fa-solid fa-chart-line text-purple-400"></i> Automated Prompt Evals
-              </button>
             </div>
           </aside>
 
-          {/* MAIN CHAT AREA */}
-          <main class="flex-1 flex flex-col h-screen overflow-hidden">
-            {/* Top Bar with 7-Stage State Machine Stepper Widget */}
-            <header class="p-4 border-b border-slate-800 flex flex-col gap-3 glass-panel">
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                  {!sidebarOpen && (
-                    <button onClick={() => setSidebarOpen(true)} class="p-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition">
-                      <i class="fa-solid fa-bars"></i>
-                    </button>
-                  )}
-                  <div>
-                    <h1 class="text-base font-bold text-slate-100 flex items-center gap-2">
-                      <i class="fa-solid fa-robot text-indigo-400"></i> DocuMesh AI Chat
-                    </h1>
-                    <p class="text-xs text-slate-400">Active Workspace: <span class="font-mono text-indigo-300">{projectId}</span></p>
-                  </div>
-                </div>
-
-                <div class="flex items-center gap-2">
+          {/* MAIN VIEW */}
+          <div class="flex-1 flex flex-col h-screen overflow-hidden">
+            {/* Context-Aware Top Bar */}
+            <header class="p-3.5 px-6 border-b border-slate-800/80 glass flex items-center justify-between shrink-0">
+              <div class="flex items-center gap-3">
+                {!sidebarOpen && (
                   <button
-                    onClick={() => setConvertModalOpen(true)}
-                    class="px-3 py-1.5 text-xs font-semibold bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 rounded-lg transition border border-emerald-500/40 flex items-center gap-1.5"
+                    onClick={() => setSidebarOpen(true)}
+                    class="p-1.5 bg-slate-900 text-slate-400 hover:text-white rounded-lg border border-slate-800"
                   >
-                    <i class="fa-solid fa-bookmark"></i> Convert to Project
+                    <i class="fa-solid fa-bars text-xs"></i>
                   </button>
+                )}
+                
+                {/* Project Breadcrumb & Status */}
+                <div class="flex items-center gap-2">
+                  <span class="font-mono text-xs font-bold text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-500/20">
+                    {projectId}
+                  </span>
+                  
+                  <span class={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${
+                    pipelineStatus === "AWAITING_HUMAN_GATE" ? "bg-amber-950/80 text-amber-300 border-amber-500/40 animate-pulse-soft" :
+                    pipelineStatus === "COMPLETED" || pipelineStatus === "DELIVER" ? "bg-emerald-950/80 text-emerald-300 border-emerald-500/40" :
+                    "bg-slate-900 text-slate-400 border-slate-800"
+                  }`}>
+                    <i class="fa-solid fa-circle-dot text-[8px] mr-1.5 opacity-80"></i>
+                    {getStageName()}
+                  </span>
+                </div>
+              </div>
+
+              {/* Context-Driven Action Buttons (Only Shown When Needed!) */}
+              <div class="flex items-center gap-2">
+                <button
+                  onClick={() => setSpotlightOpen(true)}
+                  class="px-2.5 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5"
+                  title="Search (Cmd+K)"
+                >
+                  <i class="fa-solid fa-magnifying-glass text-indigo-400"></i>
+                  <kbd class="px-1 text-[9px] bg-slate-950 text-slate-400 rounded border border-slate-800">⌘K</kbd>
+                </button>
+
+                {/* 1. If Empty Workspace: Show Upload Files Button */}
+                {documents.length === 0 && (
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    class="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition shadow flex items-center gap-1.5"
+                    class="px-3.5 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition shadow flex items-center gap-1.5"
                   >
-                    <i class="fa-solid fa-paperclip"></i> Upload Document
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                    <span>Upload Documents</span>
                   </button>
+                )}
+
+                {/* 2. If Documents Uploaded but Not Run: Show Start Audit Button */}
+                {documents.length > 0 && (pipelineStatus === "CREATED" || pipelineStatus === "INIT") && (
+                  <button
+                    onClick={runPipeline}
+                    class="px-3.5 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition shadow flex items-center gap-1.5"
+                  >
+                    <i class="fa-solid fa-play text-[10px]"></i>
+                    <span>Start Audit</span>
+                  </button>
+                )}
+
+                {/* 3. If Awaiting Gate & Findings Pending: Show Review Findings Button */}
+                {pipelineStatus === "AWAITING_HUMAN_GATE" && pendingCount > 0 && (
+                  <button
+                    onClick={() => setActiveTab("findings")}
+                    class="px-3.5 py-1.5 text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition shadow flex items-center gap-1.5 animate-pulse-soft"
+                  >
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    <span>Review {pendingCount} Discrepancies</span>
+                  </button>
+                )}
+
+                {/* 4. If Register is Ready: Show Export Report Button */}
+                {register && (
                   <a
                     href={`/api/v1/projects/${projectId}/export-report`}
                     target="_blank"
-                    class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition flex items-center gap-1.5"
+                    class="px-3.5 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition shadow flex items-center gap-1.5"
                   >
-                    <i class="fa-solid fa-file-pdf"></i> Export Report
+                    <i class="fa-solid fa-download text-xs"></i>
+                    <span>Export Deliverable</span>
                   </a>
-                </div>
-              </div>
-
-              {/* 7-Stage LangGraph State Machine Stepper Widget in Header */}
-              <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800/90">
-                <div class="flex justify-between items-center text-[11px] font-bold text-slate-400 mb-1.5">
-                  <span>LangGraph 7-Stage State Machine Status:</span>
-                  <span class="font-mono text-indigo-300">Status: {pipelineStatus}</span>
-                </div>
-                <div class="grid grid-cols-7 gap-1.5">
-                  {stages.map((stg, i) => {
-                    const isActive = currentNode === stg.id;
-                    const isPassed = ["DELIVER", "GATE_APPROVED", "COMPLETED"].includes(pipelineStatus) || (currentNode === "GATE" && i < 5);
-
-                    let badgeClass = "bg-slate-950 text-slate-500 border-slate-800";
-                    if (isActive) badgeClass = "bg-indigo-950 text-indigo-300 border-indigo-500 ring-2 ring-indigo-500/30";
-                    else if (isPassed) badgeClass = "bg-emerald-950/60 text-emerald-400 border-emerald-500/40";
-
-                    return (
-                      <div key={stg.id} class={`p-1.5 rounded-lg border text-center text-[10px] font-bold truncate transition ${badgeClass}`}>
-                        {stg.label}
-                      </div>
-                    );
-                  })}
-                </div>
+                )}
               </div>
             </header>
 
-            {/* Messages Feed */}
-            <div class="flex-1 overflow-y-auto p-6 space-y-6">
-              {chatMessages.map((msg, idx) => (
-                <div key={idx} class={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
-                  <div class={`p-5 rounded-2xl max-w-3xl text-sm leading-relaxed ${msg.role === "user" ? "bg-indigo-600 text-white rounded-br-none shadow-lg shadow-indigo-600/20" : "glass-panel text-slate-100 rounded-bl-none shadow-xl border border-slate-800"}`}>
-                    
-                    {/* Rendered Markdown Response */}
-                    <div
-                      class="prose-dark font-sans"
-                      dangerouslySetInnerHTML={renderMarkdown(msg.content)}
-                    />
+            {/* TAB CONTENT */}
+            <main class="flex-1 overflow-hidden relative">
 
-                    {/* IN-CHAT INTERACTIVE COMPONENT: FINDINGS APPROVAL GATE */}
-                    {msg.action_payload?.type === "FINDINGS_APPROVAL_GATE" && (
-                      <div class="mt-4 pt-4 border-t border-slate-700/60 space-y-4">
-                        <h4 class="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-                          <i class="fa-solid fa-triangle-exclamation"></i> Action Required: Review & Approve Findings ({msg.action_payload.pending_findings.length})
-                        </h4>
+              {/* TAB 1: ASSISTANT CHAT */}
+              {activeTab === "chat" && (
+                <div class="h-full flex flex-col">
+                  {/* Empty Workspace Helper Card */}
+                  {documents.length === 0 && (
+                    <div class="p-8 max-w-xl mx-auto my-auto text-center card-dark rounded-2xl border border-slate-800 space-y-4">
+                      <div class="w-12 h-12 rounded-2xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center mx-auto text-xl border border-indigo-500/30">
+                        <i class="fa-solid fa-folder-open"></i>
+                      </div>
+                      <div>
+                        <h3 class="text-base font-bold text-white">Empty Workspace</h3>
+                        <p class="text-xs text-slate-400 mt-1">
+                          Upload `.docx`, `.pdf`, or `.txt` contract files to start the automated reconciliation audit.
+                        </p>
+                      </div>
+                      <div class="flex justify-center gap-3 pt-2">
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition shadow flex items-center gap-2"
+                        >
+                          <i class="fa-solid fa-cloud-arrow-up"></i> Upload Files
+                        </button>
+                        <button
+                          onClick={loadDemoData}
+                          class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 font-semibold text-xs rounded-xl transition border border-slate-800"
+                        >
+                          Load Greenfield Demo
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
-                        {msg.action_payload.pending_findings.map((f) => (
-                          <div key={f.finding_id} class="p-4 rounded-xl bg-slate-900/90 border border-slate-800 text-xs">
-                            <div class="flex justify-between items-center mb-2">
-                              <div class="flex items-center gap-2">
-                                <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30 text-[10px]">
-                                  {f.severity}
-                                </span>
-                                <strong class="text-slate-100 font-bold">[{f.finding_id}] {f.title}</strong>
+                  {/* Messages Feed */}
+                  {documents.length > 0 && (
+                    <div class="flex-1 overflow-y-auto p-6 space-y-4">
+                      {chatMessages.map((msg, idx) => (
+                        <div key={msg.id || idx} class={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                          <div class={`p-4 rounded-2xl max-w-2xl text-sm leading-relaxed ${
+                            msg.role === "user" ? "bg-indigo-600 text-white rounded-br-none" : "card-dark text-slate-200 rounded-bl-none shadow-lg"
+                          }`}>
+                            <div
+                              class="prose-custom"
+                              dangerouslySetInnerHTML={{ __html: marked.parse(msg.content || "") }}
+                            />
+
+                            {/* Citations */}
+                            {msg.citations && msg.citations.length > 0 && (
+                              <div class="mt-3 pt-2 border-t border-slate-800 flex flex-wrap gap-1.5">
+                                {msg.citations.map((c, cIdx) => (
+                                  <span key={cIdx} class="px-2 py-0.5 rounded bg-indigo-950/60 text-indigo-300 text-[10px] font-mono border border-indigo-800/40">
+                                    {c.filename} {c.location && `(${c.location})`}
+                                  </span>
+                                ))}
                               </div>
-                              <button
-                                onClick={() => handleApproveSingle(f.finding_id)}
-                                class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded transition text-[11px]"
-                              >
-                                Approve Fix
-                              </button>
-                            </div>
-                            <p class="text-slate-300 mb-2">{f.description}</p>
-                            <div class="font-mono text-indigo-300 bg-indigo-950/40 p-2 rounded border border-indigo-900/50 italic">
-                              <strong>Source Quote ({f.source_a.filename}):</strong> "{f.source_a.exact_quote}"
-                            </div>
+                            )}
+
+                            {/* Inline Gate Review */}
+                            {msg.action_payload?.type === "GATE_FINDINGS" && (
+                              <div class="mt-3 pt-3 border-t border-slate-800 space-y-2">
+                                <div class="flex items-center justify-between">
+                                  <span class="text-xs font-bold text-amber-400">Action Required: Findings Gate</span>
+                                  <button
+                                    onClick={() => setActiveTab("findings")}
+                                    class="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded"
+                                  >
+                                    Review Findings Tab
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        ))}
-
-                        <div class="pt-2 flex gap-2">
-                          <button
-                            onClick={() => sendStreamingMessage("Approve all findings")}
-                            class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition shadow flex items-center justify-center gap-2"
-                          >
-                            <i class="fa-solid fa-check-double"></i> Batch Approve All Findings
-                          </button>
                         </div>
-                      </div>
-                    )}
+                      ))}
 
-                    {/* IN-CHAT INTERACTIVE COMPONENT: RECONCILED REGISTER TABLE */}
-                    {msg.action_payload?.type === "SHOW_REGISTER" && msg.action_payload.register && (
-                      <div class="mt-4 pt-4 border-t border-slate-700/60">
-                        <div class="rounded-xl overflow-hidden border border-slate-800 bg-slate-900/90 text-xs">
-                          <table class="w-full text-left">
-                            <thead class="bg-slate-950 text-slate-400 font-bold uppercase text-[10px] border-b border-slate-800">
-                              <tr>
-                                <th class="p-2.5">Metric</th>
-                                <th class="p-2.5">Reconciled Value</th>
-                                <th class="p-2.5">Status</th>
-                                <th class="p-2.5">Citation</th>
-                              </tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-800">
-                              {msg.action_payload.register.entries.map((e, eIdx) => (
-                                <tr key={eIdx} class="hover:bg-slate-850">
-                                  <td class="p-2.5 font-semibold text-slate-200">{e.title}</td>
-                                  <td class="p-2.5 font-mono text-indigo-300 font-bold">{e.reconciled_value}</td>
-                                  <td class="p-2.5">
-                                    <span class={`px-2 py-0.5 rounded text-[10px] font-bold ${e.status === 'CORROBORATED' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
-                                      {e.status}
-                                    </span>
-                                  </td>
-                                  <td class="p-2.5 text-slate-400 font-mono text-[10px]">{e.primary_citation.filename}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                      {isStreaming && (
+                        <div class="p-3 rounded-xl card-dark text-xs text-slate-400 flex items-center gap-2 max-w-xs animate-pulse">
+                          <i class="fa-solid fa-spinner fa-spin text-indigo-400"></i>
+                          <span>{thinkingMsg || "Reasoning..."}</span>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
+                      )}
+                      <div ref={messagesEndRef} />
+                    </div>
+                  )}
 
-              {/* Thinking Indicator & Uploading Indicator */}
-              {(loading || uploading || thinkingStage) && (
-                <div class="flex items-start">
-                  <div class="p-4 rounded-2xl glass-panel text-slate-300 text-xs flex items-center gap-3 border border-slate-800 animate-pulse">
-                    <i class="fa-solid fa-spinner fa-spin text-indigo-400 text-base"></i>
-                    <span>{thinkingStage || (uploading ? "Uploading & ingesting document file..." : "DocuMesh AI is reasoning over the document graph...")}</span>
+                  {/* Input Form */}
+                  <div class="p-4 border-t border-slate-800/80 glass">
+                    <form onSubmit={(e) => { e.preventDefault(); sendMessage(); }} class="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        class="px-3 py-2.5 card-dark text-slate-400 hover:text-white rounded-xl"
+                        title="Attach file"
+                      >
+                        <i class="fa-solid fa-paperclip"></i>
+                      </button>
+                      <input
+                        type="text"
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        placeholder="Ask anything about the document pile, or type 'run audit'..."
+                        class="flex-1 px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                      />
+                      <button
+                        type="submit"
+                        disabled={isStreaming}
+                        class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-sm transition"
+                      >
+                        <i class="fa-solid fa-paper-plane"></i>
+                      </button>
+                    </form>
                   </div>
                 </div>
               )}
-              <div ref={messagesEndRef} />
-            </div>
 
-            {/* Chat Input Bar */}
-            <form onSubmit={(e) => { e.preventDefault(); sendStreamingMessage(); }} class="p-6 pt-2 flex gap-3">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                class="px-4 py-3.5 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-2xl border border-slate-800 hover:border-indigo-500/50 transition flex items-center justify-center text-base"
-                title="Attach Document File (.docx, .pdf, .txt)"
-              >
-                <i class="fa-solid fa-paperclip"></i>
-              </button>
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Ask anything, type 'run analysis', or attach document files..."
-                class="flex-1 px-5 py-3.5 bg-slate-900 border border-slate-800 rounded-2xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition shadow-inner"
-              />
-              <button
-                type="submit"
-                disabled={loading || uploading}
-                class="px-6 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-2xl text-sm transition shadow-lg shadow-indigo-600/20 flex items-center gap-2"
-              >
-                <i class="fa-solid fa-paper-plane"></i>
-              </button>
-            </form>
-          </main>
+              {/* TAB 2: DISCREPANCIES (HUMAN GATE) */}
+              {activeTab === "findings" && (
+                <div class="h-full flex flex-col p-6 overflow-y-auto">
+                  <div class="flex items-center justify-between pb-4 border-b border-slate-800/80">
+                    <div>
+                      <h2 class="text-base font-bold text-white">Discrepancy Findings & Human Gate</h2>
+                      <p class="text-xs text-slate-400">Cross-document conflicts identified across the project pile.</p>
+                    </div>
 
-          {/* ARTIFACT PREVIEW MODAL */}
-          {previewDoc && (
-            <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6 z-50">
-              <div class="glass-panel p-6 rounded-2xl max-w-2xl w-full border border-slate-700 shadow-2xl flex flex-col max-h-[80vh]">
-                <div class="flex justify-between items-center pb-4 border-b border-slate-800">
-                  <div class="flex items-center gap-2">
-                    <i class="fa-solid fa-file-lines text-indigo-400 text-lg"></i>
-                    <h3 class="text-base font-bold text-slate-100">{previewDoc.filename}</h3>
+                    <div class="flex items-center gap-2">
+                      <div class="flex gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800 text-xs">
+                        {["ALL", "PENDING", "APPROVED", "REJECTED"].map(f => (
+                          <button
+                            key={f}
+                            onClick={() => setFindingFilter(f)}
+                            class={`px-2.5 py-1 rounded font-semibold transition ${findingFilter === f ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"}`}
+                          >
+                            {f}
+                          </button>
+                        ))}
+                      </div>
+
+                      {pendingCount > 0 && (
+                        <button
+                          onClick={batchApproveAll}
+                          class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition"
+                        >
+                          Approve All ({pendingCount})
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <button onClick={() => setPreviewDoc(null)} class="text-slate-400 hover:text-slate-200">
-                    <i class="fa-solid fa-xmark text-lg"></i>
-                  </button>
-                </div>
-                <div class="p-4 my-4 bg-slate-900/90 rounded-xl font-mono text-xs text-slate-300 overflow-y-auto flex-1 whitespace-pre-wrap border border-slate-800">
-                  {previewDoc.extracted_text || "No preview text available."}
-                </div>
-                <div class="flex justify-end">
-                  <button onClick={() => setPreviewDoc(null)} class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg">
-                    Close Preview
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
 
-          {/* MULTI-MODEL LLM MODAL */}
-          {llmModalOpen && (
-            <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6 z-50">
-              <div class="glass-panel p-6 rounded-2xl max-w-md w-full border border-indigo-500/40 shadow-2xl">
-                <div class="flex justify-between items-center pb-4 border-b border-slate-800">
-                  <h3 class="text-base font-bold text-slate-100 flex items-center gap-2">
-                    <i class="fa-solid fa-brain text-indigo-400"></i> Multi-Model LLM Config
-                  </h3>
-                  <button onClick={() => setLlmModalOpen(false)} class="text-slate-400 hover:text-slate-200">
-                    <i class="fa-solid fa-xmark"></i>
-                  </button>
-                </div>
-                <div class="my-4 space-y-3 text-xs text-slate-300">
-                  <p>Supports native OpenAI (`gpt-4o`), Anthropic Claude (`3.5 Sonnet`), Google Gemini (`1.5 Pro`), and custom OpenAI-compatible endpoints (`OPENAI_BASE_URL` for Together, Ollama, OpenRouter, or vLLM).</p>
-                </div>
-                <div class="flex justify-end pt-2 border-t border-slate-800">
-                  <button onClick={() => setLlmModalOpen(false)} class="px-4 py-2 bg-indigo-600 text-white font-bold text-xs rounded-lg">Close</button>
-                </div>
-              </div>
-            </div>
-          )}
+                  <div class="py-4 space-y-4">
+                    {filteredFindings.length === 0 ? (
+                      <div class="p-12 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-xl">
+                        No findings matching filter '{findingFilter}'.
+                      </div>
+                    ) : (
+                      filteredFindings.map((f) => {
+                        const isPending = f.status === "PRESENTED";
+                        const isApproved = f.status === "APPROVED";
+                        const isRejected = f.status === "REJECTED";
 
-          {/* TIME TRAVEL MODAL */}
-          {timeTravelModalOpen && (
-            <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6 z-50">
-              <div class="glass-panel p-6 rounded-2xl max-w-md w-full border border-emerald-500/40 shadow-2xl">
-                <div class="flex justify-between items-center pb-4 border-b border-slate-800">
-                  <h3 class="text-base font-bold text-slate-100 flex items-center gap-2">
-                    <i class="fa-solid fa-clock-rotate-left text-emerald-400"></i> LangGraph Time Travel
-                  </h3>
-                  <button onClick={() => setTimeTravelModalOpen(false)} class="text-slate-400 hover:text-slate-200">
-                    <i class="fa-solid fa-xmark"></i>
-                  </button>
-                </div>
-                <div class="my-4 space-y-3 text-xs text-slate-300">
-                  <p>Rewind pipeline state machine back to any prior checkpoint node (`/api/v1/projects/{id}/rewind`) and re-branch graph execution!</p>
-                </div>
-                <div class="flex justify-end pt-2 border-t border-slate-800">
-                  <button onClick={() => setTimeTravelModalOpen(false)} class="px-4 py-2 bg-emerald-600 text-white font-bold text-xs rounded-lg">Close</button>
-                </div>
-              </div>
-            </div>
-          )}
+                        return (
+                          <div key={f.finding_id} class="card-dark rounded-xl p-5 space-y-3">
+                            <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+                              <div class="flex items-center gap-2">
+                                <span class={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  f.severity === "CRITICAL" ? "bg-rose-950 text-rose-300 border border-rose-800" :
+                                  "bg-amber-950 text-amber-300 border border-amber-800"
+                                }`}>
+                                  {f.severity}
+                                </span>
+                                <span class="text-xs font-mono font-bold text-indigo-400">[{f.finding_id}]</span>
+                                <h3 class="text-sm font-bold text-white">{f.title}</h3>
+                              </div>
 
-          {/* EVALS MODAL */}
-          {evalsModalOpen && (
-            <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6 z-50">
-              <div class="glass-panel p-6 rounded-2xl max-w-md w-full border border-purple-500/40 shadow-2xl">
-                <div class="flex justify-between items-center pb-4 border-b border-slate-800">
-                  <h3 class="text-base font-bold text-slate-100 flex items-center gap-2">
-                    <i class="fa-solid fa-chart-line text-purple-400"></i> Automated Prompt Evals
-                  </h3>
-                  <button onClick={() => setEvalsModalOpen(false)} class="text-slate-400 hover:text-slate-200">
-                    <i class="fa-solid fa-xmark"></i>
-                  </button>
-                </div>
-                <div class="my-4 space-y-3 text-xs text-slate-300">
-                  <p>Run prompt evaluation benchmark suite (`/api/v1/evals/run`) to score Faithfulness, Recall, and Prompt Injection Resistance across system prompt variants.</p>
-                </div>
-                <div class="flex justify-end pt-2 border-t border-slate-800">
-                  <button onClick={() => setEvalsModalOpen(false)} class="px-4 py-2 bg-purple-600 text-white font-bold text-xs rounded-lg">Close</button>
-                </div>
-              </div>
-            </div>
-          )}
+                              {/* Status Badge */}
+                              <div>
+                                {isApproved && (
+                                  <span class="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                    <i class="fa-solid fa-check mr-1"></i> APPROVED
+                                  </span>
+                                )}
+                                {isRejected && (
+                                  <span class="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                                    <i class="fa-solid fa-xmark mr-1"></i> REJECTED
+                                  </span>
+                                )}
+                                {isPending && (
+                                  <span class="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                    AWAITING REVIEW
+                                  </span>
+                                )}
+                              </div>
+                            </div>
 
-          {/* CONVERT TO PROJECT MODAL */}
-          {convertModalOpen && (
-            <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6 z-50">
-              <div class="glass-panel p-6 rounded-2xl max-w-md w-full border border-slate-700 shadow-2xl">
-                <div class="flex justify-between items-center pb-4 border-b border-slate-800">
-                  <h3 class="text-base font-bold text-slate-100 flex items-center gap-2">
-                    <i class="fa-solid fa-bookmark text-emerald-400"></i> Promote Chat to Named Project
-                  </h3>
-                  <button onClick={() => setConvertModalOpen(false)} class="text-slate-400 hover:text-slate-200">
-                    <i class="fa-solid fa-xmark"></i>
-                  </button>
+                            <p class="text-xs text-slate-300">{f.description}</p>
+
+                            {/* Side-by-side Diff */}
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 my-2 text-xs">
+                              <div class="p-3 rounded-lg bg-slate-950/80 border border-slate-800 space-y-1">
+                                <span class="text-indigo-300 font-semibold block">{f.source_a?.filename}</span>
+                                <p class="font-mono text-[11px] text-indigo-200 italic">"{f.source_a?.exact_quote}"</p>
+                              </div>
+                              <div class="p-3 rounded-lg bg-slate-950/80 border border-slate-800 space-y-1">
+                                <span class="text-rose-300 font-semibold block">{f.source_b?.filename || "Contradiction"}</span>
+                                <p class="font-mono text-[11px] text-rose-200 italic">"{f.source_b?.exact_quote || 'Discrepancy'}"</p>
+                              </div>
+                            </div>
+
+                            {/* AI Remediation */}
+                            {f.resolution_action && (
+                              <div class="p-2.5 rounded-lg bg-emerald-950/30 border border-emerald-500/20 text-xs text-emerald-300">
+                                <strong>Proposed Fix:</strong> <span class="font-mono">{f.resolution_action}</span>
+                              </div>
+                            )}
+
+                            {/* Actions ONLY FOR PENDING */}
+                            {isPending ? (
+                              <div class="pt-2 flex justify-end gap-2">
+                                <button
+                                  onClick={() => decideFinding(f.finding_id, true)}
+                                  class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition"
+                                >
+                                  Approve Fix
+                                </button>
+                                <button
+                                  onClick={() => decideFinding(f.finding_id, false)}
+                                  class="px-3.5 py-1.5 bg-rose-600/80 hover:bg-rose-600 text-white font-bold text-xs rounded-lg transition"
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            ) : (
+                              <div class="pt-2 flex justify-end">
+                                <button
+                                  onClick={() => decideFinding(f.finding_id, !isApproved)}
+                                  class="text-[11px] text-slate-500 hover:text-slate-300 underline"
+                                >
+                                  Change Decision
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
-                <div class="my-4 space-y-3">
-                  <label class="text-xs font-semibold text-slate-300">Project Name:</label>
+              )}
+
+              {/* TAB 3: KNOWLEDGE GRAPH */}
+              {activeTab === "graph" && (
+                <div class="h-full w-full relative bg-[#060910]">
+                  <div class="absolute top-4 left-4 z-10 glass p-3 rounded-xl max-w-xs text-xs space-y-1">
+                    <strong class="text-white block font-bold">Conflict Network</strong>
+                    <p class="text-slate-400 text-[11px]">
+                      Purple boxes represent Documents; Amber/Red circles represent Discrepancies; Red dashed lines show conflicting citations.
+                    </p>
+                  </div>
+                  <div ref={visContainerRef} class="w-full h-full" />
+                </div>
+              )}
+
+              {/* TAB 4: RECONCILED REGISTER */}
+              {activeTab === "register" && (
+                <div class="h-full flex flex-col p-6 overflow-y-auto">
+                  <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+                    <div>
+                      <h2 class="text-base font-bold text-white">Reconciled Project Register</h2>
+                      <p class="text-xs text-slate-400">Final audited deliverables based on approved gate decisions.</p>
+                    </div>
+                    {register && (
+                      <a
+                        href={`/api/v1/projects/${projectId}/export-report`}
+                        target="_blank"
+                        class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition"
+                      >
+                        <i class="fa-solid fa-download mr-1"></i> Export Report
+                      </a>
+                    )}
+                  </div>
+
+                  {!register || !register.entries || register.entries.length === 0 ? (
+                    <div class="p-12 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-xl my-6">
+                      Register not generated yet. Run pipeline and approve findings first.
+                    </div>
+                  ) : (
+                    <div class="py-4">
+                      <div class="rounded-xl overflow-hidden border border-slate-800 card-dark">
+                        <table class="w-full text-left text-xs">
+                          <thead class="bg-slate-950 text-slate-400 font-bold uppercase text-[10px] border-b border-slate-800">
+                            <tr>
+                              <th class="p-3">Entity / Metric</th>
+                              <th class="p-3">Reconciled Value</th>
+                              <th class="p-3">Status</th>
+                              <th class="p-3">Citation</th>
+                            </tr>
+                          </thead>
+                          <tbody class="divide-y divide-slate-800/80">
+                            {register.entries.map((e, idx) => (
+                              <tr key={idx} class="hover:bg-slate-900/40">
+                                <td class="p-3 font-semibold text-white">{e.title}</td>
+                                <td class="p-3 font-mono text-indigo-300 font-bold">{e.reconciled_value} {e.unit || ''}</td>
+                                <td class="p-3">
+                                  <span class={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    e.status === 'CORROBORATED' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-purple-500/20 text-purple-300'
+                                  }`}>
+                                    {e.status}
+                                  </span>
+                                </td>
+                                <td class="p-3 text-slate-400 font-mono text-[11px]">{e.primary_citation?.filename}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </main>
+          </div>
+
+          {/* SPOTLIGHT SEARCH (CMD+K) */}
+          {spotlightOpen && (
+            <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-start justify-center pt-20 p-4 z-50">
+              <div class="glass p-5 rounded-2xl max-w-xl w-full border border-indigo-500/40 shadow-2xl space-y-3">
+                <div class="flex items-center gap-2 pb-2 border-b border-slate-800">
+                  <i class="fa-solid fa-magnifying-glass text-indigo-400"></i>
                   <input
                     type="text"
-                    value={newProjectNameInput}
-                    onChange={(e) => setNewProjectNameInput(e.target.value)}
-                    placeholder="e.g. Phase 2 Construction Audit"
-                    class="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
+                    value={spotlightQuery}
+                    onChange={(e) => {
+                      setSpotlightQuery(e.target.value);
+                      handleSearch(e.target.value);
+                    }}
+                    placeholder="Search across all document chunks (BM25 Hybrid)..."
+                    class="flex-1 bg-transparent text-sm text-white focus:outline-none"
+                    autoFocus
                   />
-                  <p class="text-[11px] text-slate-400">This will save all documents, extracted facts, and findings from this chat session into a permanent project workspace.</p>
+                  <kbd class="px-1.5 py-0.5 bg-slate-900 text-slate-400 text-[10px] rounded">ESC</kbd>
                 </div>
-                <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
-                  <button
-                    onClick={() => setConvertModalOpen(false)}
-                    class="px-4 py-2 bg-slate-800 text-slate-300 text-xs font-semibold rounded-lg hover:bg-slate-700"
-                  >
-                    Cancel
+                <div class="max-h-80 overflow-y-auto space-y-2">
+                  {spotlightResults.map((r, idx) => (
+                    <div key={idx} class="p-3 rounded-lg bg-slate-900 border border-slate-800 text-xs space-y-1">
+                      <div class="text-indigo-300 font-semibold">{r.doc_name}</div>
+                      <p class="text-slate-300 font-mono text-[11px]">"{r.text}"</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* DOCUMENT INSPECTOR */}
+          {selectedDoc && (
+            <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
+              <div class="glass p-6 rounded-2xl max-w-2xl w-full border border-slate-800 shadow-2xl flex flex-col max-h-[80vh]">
+                <div class="flex justify-between items-center pb-3 border-b border-slate-800">
+                  <h3 class="text-sm font-bold text-white">{selectedDoc.filename}</h3>
+                  <button onClick={() => setSelectedDoc(null)} class="text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-xmark"></i>
                   </button>
-                  <button
-                    onClick={convertToNamedProject}
-                    class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg shadow transition"
-                  >
-                    Promote Project
+                </div>
+                <div class="p-3 my-3 bg-slate-950 rounded-xl font-mono text-xs text-slate-300 overflow-y-auto flex-1 whitespace-pre-wrap">
+                  {selectedDoc.extracted_text || "No preview text."}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* CREATE PROJECT MODAL */}
+          {createModalOpen && (
+            <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
+              <div class="glass p-5 rounded-2xl max-w-md w-full border border-slate-800 shadow-2xl space-y-3">
+                <div class="flex justify-between items-center pb-2 border-b border-slate-800">
+                  <h3 class="text-sm font-bold text-white">Create New Workspace</h3>
+                  <button onClick={() => setCreateModalOpen(false)} class="text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-xmark"></i>
                   </button>
+                </div>
+                <div class="space-y-2 text-xs">
+                  <div>
+                    <label class="text-slate-400 block mb-1">Project Name:</label>
+                    <input
+                      type="text"
+                      value={newProjName}
+                      onChange={(e) => setNewProjName(e.target.value)}
+                      placeholder="e.g. Audit Phase 2"
+                      class="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label class="text-slate-400 block mb-1">Document Folder (Optional):</label>
+                    <input
+                      type="text"
+                      value={newDocPath}
+                      onChange={(e) => setNewDocPath(e.target.value)}
+                      placeholder="Leave empty to upload files later"
+                      class="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-white font-mono text-[11px] focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                  <button onClick={() => setCreateModalOpen(false)} class="px-3 py-1.5 text-xs text-slate-400 hover:text-white">Cancel</button>
+                  <button onClick={handleCreateProject} class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg">Create</button>
                 </div>
               </div>
             </div>

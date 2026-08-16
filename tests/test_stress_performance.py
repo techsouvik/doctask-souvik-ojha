@@ -16,7 +16,7 @@ async def test_high_concurrency_multi_project_stress():
     start_time = time.time()
 
     async def run_single_proj(idx: int):
-        project_id = f"stress_proj_{idx}"
+        project_id = ProjectService.create_project(f"stress_proj_{idx}_{int(time.time()*1000)}", "/Users/souvikojha/doctask-souvik-ojha/test_data/greenfield_tech_park")
         state = ProjectService.run_pipeline_for_project(project_id)
         assert state.status == "AWAITING_HUMAN_GATE"
         assert len(state.pending_findings) == 5
