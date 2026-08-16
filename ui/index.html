@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DocuMesh AI — Minimalist Chat Engine</title>
+  <title>DocuMesh AI — Minimalist Streaming Chat Engine</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- FontAwesome Icons CDN -->
@@ -29,7 +29,7 @@
     .prose-dark p { margin-bottom: 0.5rem; }
     .prose-dark ul { list-style-type: disc; padding-left: 1.25rem; margin-bottom: 0.5rem; }
     .prose-dark strong { color: #f8fafc; font-weight: 700; }
-    .prose-dark code { background: rgba(255,255,255,0.1); padding: 0.1rem 0.3rem; rounded: 0.25rem; font-family: monospace; }
+    .prose-dark code { background: rgba(255,255,255,0.1); padding: 0.1rem 0.3rem; border-radius: 0.25rem; font-family: monospace; }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 font-sans antialiased min-h-screen">
@@ -42,19 +42,20 @@
       const [projectId] = useState("proj_greenfield_tech_park");
       const [treeId, setTreeId] = useState("chat_session_main");
       const [sessions, setSessions] = useState([
-        { id: "chat_session_main", title: "Main Audit Thread" },
-        { id: "tree_demo", title: "Document Pile Analysis" }
+        { id: "chat_session_main", title: "Main Audit Thread" }
       ]);
       const [documents, setDocuments] = useState([]);
+      const [previewDoc, setPreviewDoc] = useState(null);
       const [chatMessages, setChatMessages] = useState([
         {
           role: "assistant",
-          content: "Hello! I am **DocuMesh AI**, your agentic document reconciliation assistant powered by LangGraph.\n\nI own the **Greenfield Tech Park** document pile (contracts, status reports, invoices, material receipts, correspondence).\n\nYou can upload new files using the **📎 attach button** below or the **Upload File** button in the sidebar, or ask me any question!",
+          content: "Hello! I am **DocuMesh AI**, your agentic document reconciliation assistant powered by LangGraph.\n\nI own the **Greenfield Tech Park** document pile (contracts, status reports, invoices, material receipts, correspondence).\n\nYou can upload new files using the **📎 attach button** below, or click **+ New Chat** in the sidebar to start a fresh thread!",
           action_payload: null
         }
       ]);
       const [chatInput, setChatInput] = useState("");
       const [loading, setLoading] = useState(false);
+      const [thinkingStage, setThinkingStage] = useState("");
       const [uploading, setUploading] = useState(false);
       const [sidebarOpen, setSidebarOpen] = useState(true);
       const messagesEndRef = useRef(null);
@@ -67,7 +68,7 @@
 
       useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, [chatMessages, loading, uploading]);
+      }, [chatMessages, loading, thinkingStage, uploading]);
 
       const fetchDocuments = async () => {
         try {
@@ -95,6 +96,19 @@
         }
       };
 
+      const createNewChat = () => {
+        const newId = "chat_session_" + Date.now().toString().slice(-6);
+        setTreeId(newId);
+        setSessions(prev => [{ id: newId, title: "New Conversation" }, ...prev]);
+        setChatMessages([
+          {
+            role: "assistant",
+            content: "Started a fresh conversation session! Ask me anything about contracts, status reports, or run an analysis.",
+            action_payload: null
+          }
+        ]);
+      };
+
       const handleFileUpload = async (e) => {
         const files = e.target.files;
         if (!files || files.length === 0) return;
@@ -114,7 +128,7 @@
               const data = await res.json();
               setChatMessages(prev => [...prev, {
                 role: "assistant",
-                content: `Successfully uploaded and ingested document **${data.filename || files[i].name}**!\n\n• Classified as: \`${data.doc_type || 'UNKNOWN'}\`\n• Extracted facts: **${data.facts_extracted || 0}**\n\nClick 'Run Document Pile Scan' below to reconcile this new document against the project register!`
+                content: `Uploaded and created Artifact **${data.filename || files[i].name}**!\n\n• Classified as: \`${data.doc_type || 'UNKNOWN'}\`\n• Extracted facts: **${data.facts_extracted || 0}**\n\nClick 'Run Document Pile Scan' below to reconcile this new artifact against the project register!`
               }]);
               fetchDocuments();
             }
@@ -132,8 +146,8 @@
           const res = await fetch(`/api/v1/projects/${projectId}/sessions/${sId}`);
           if (res.ok) {
             const data = await res.json();
-            if (data.nodes) {
-              setChatMessages(data.nodes.map(n => ({
+            if (data.thread && data.thread.length > 0) {
+              setChatMessages(data.thread.map(n => ({
                 role: n.role,
                 content: n.content,
                 action_payload: n.metadata?.action_payload || null
@@ -145,35 +159,60 @@
         }
       };
 
-      const sendMessage = async (textToSend) => {
+      // SSE Streaming Chat Message Handler
+      const sendStreamingMessage = async (textToSend) => {
         const query = textToSend || chatInput;
         if (!query.trim()) return;
 
         setChatInput("");
         setChatMessages(prev => [...prev, { role: "user", content: query }]);
         setLoading(true);
+        setThinkingStage("Scanning document graph...");
 
-        try {
-          const res = await fetch(`/api/v1/projects/${projectId}/sessions/${treeId}/messages`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ content: query })
-          });
+        // Create empty assistant message placeholder for streaming
+        setChatMessages(prev => [...prev, { role: "assistant", content: "", action_payload: null }]);
 
-          if (res.ok) {
-            const data = await res.json();
-            setChatMessages(prev => [...prev, {
-              role: "assistant",
-              content: data.assistant_node.content,
-              action_payload: data.action_payload
-            }]);
-            fetchSessions();
+        const encodedQuery = encodeURIComponent(query);
+        const eventSource = new EventSource(`/api/v1/projects/${projectId}/sessions/${treeId}/stream?q=${encodedQuery}`);
+
+        let accumulatedContent = "";
+
+        eventSource.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+
+            if (data.type === "thinking") {
+              setThinkingStage(data.stage);
+            } else if (data.type === "chunk") {
+              setThinkingStage("");
+              accumulatedContent += data.content;
+              setChatMessages(prev => {
+                const updated = [...prev];
+                updated[updated.length - 1].content = accumulatedContent;
+                return updated;
+              });
+            } else if (data.type === "done") {
+              setThinkingStage("");
+              setChatMessages(prev => {
+                const updated = [...prev];
+                updated[updated.length - 1].action_payload = data.action_payload;
+                return updated;
+              });
+              eventSource.close();
+              setLoading(false);
+              fetchSessions();
+            }
+          } catch (e) {
+            console.error("SSE parse error", e);
           }
-        } catch (e) {
-          console.error("Chat Error", e);
-        } finally {
+        };
+
+        eventSource.onerror = (err) => {
+          console.error("SSE stream error", err);
+          eventSource.close();
           setLoading(false);
-        }
+          setThinkingStage("");
+        };
       };
 
       const handleApproveSingle = async (findingId) => {
@@ -184,7 +223,7 @@
             body: JSON.stringify({ finding_id: findingId, approved: true })
           });
           if (res.ok) {
-            sendMessage(`I've approved finding ${findingId}. Update status!`);
+            sendStreamingMessage(`Approved finding ${findingId}. Update register!`);
           }
         } catch (e) {
           console.error("Approve Error", e);
@@ -219,7 +258,7 @@
             class="hidden"
           />
 
-          {/* LEFT SIDEBAR */}
+          {/* LEFT SIDEBAR: History Conversations & Document Artifacts */}
           <aside class={`${sidebarOpen ? "w-80" : "w-0"} glass-panel border-r border-slate-800 flex flex-col transition-all duration-300 overflow-hidden`}>
             <div class="p-4 border-b border-slate-800 flex items-center justify-between">
               <div class="flex items-center gap-2.5">
@@ -228,6 +267,16 @@
               </div>
               <button onClick={() => setSidebarOpen(false)} class="text-slate-400 hover:text-slate-200">
                 <i class="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+
+            {/* "+ New Chat" Button */}
+            <div class="p-4 border-b border-slate-800">
+              <button
+                onClick={createNewChat}
+                class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition shadow flex items-center justify-center gap-2"
+              >
+                <i class="fa-solid fa-plus"></i> New Conversation
               </button>
             </div>
 
@@ -250,15 +299,15 @@
               </div>
             </div>
 
-            {/* Uploaded Document Pile Section with Upload Button */}
+            {/* Uploaded Document Artifacts Section */}
             <div class="p-4 flex-1 overflow-y-auto">
               <div class="flex items-center justify-between mb-3">
                 <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-                  <i class="fa-solid fa-folder-closed"></i> Document Pile ({documents.length})
+                  <i class="fa-solid fa-box-archive"></i> Document Artifacts ({documents.length})
                 </h3>
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  class="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] rounded-lg transition flex items-center gap-1.5 shadow"
+                  class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-[11px] rounded-lg transition flex items-center gap-1.5 shadow"
                 >
                   <i class="fa-solid fa-cloud-arrow-up"></i> Upload
                 </button>
@@ -266,20 +315,28 @@
 
               <div class="space-y-2">
                 {documents.map((doc, idx) => {
-                  let docIcon = "fa-file-lines text-slate-400";
-                  if (doc.filename.endsWith(".pdf")) docIcon = "fa-file-pdf text-rose-400";
-                  if (doc.filename.endsWith(".docx")) docIcon = "fa-file-word text-sky-400";
+                  let docBadge = "bg-slate-800 text-slate-300";
+                  if (doc.filename.endsWith(".pdf")) docBadge = "bg-rose-950/80 text-rose-300 border border-rose-800/40";
+                  if (doc.filename.endsWith(".docx")) docBadge = "bg-sky-950/80 text-sky-300 border border-sky-800/40";
 
                   return (
-                    <div key={idx} class="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80 text-xs hover:border-slate-700 transition">
-                      <div class="flex items-center gap-2 font-semibold text-slate-200 truncate">
-                        <i class={`fa-solid ${docIcon}`}></i>
-                        <span class="truncate">{doc.filename}</span>
+                    <div
+                      key={idx}
+                      onClick={() => setPreviewDoc(doc)}
+                      class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs hover:border-indigo-500/50 cursor-pointer transition flex items-center justify-between"
+                    >
+                      <div class="truncate">
+                        <div class="font-semibold text-slate-200 truncate flex items-center gap-2">
+                          <span class={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${docBadge}`}>
+                            {doc.filename.split('.').pop().toUpperCase()}
+                          </span>
+                          <span class="truncate">{doc.filename}</span>
+                        </div>
+                        <div class="text-[10px] text-slate-500 mt-1 font-mono">
+                          {doc.doc_type} • {doc.chunks ? doc.chunks.length : 1} Chunks
+                        </div>
                       </div>
-                      <div class="flex justify-between items-center text-[10px] text-slate-500 mt-1 font-mono">
-                        <span>{doc.doc_type}</span>
-                        <span>{doc.checksum ? doc.checksum.substring(0, 8) : "Grounded"}</span>
-                      </div>
+                      <i class="fa-solid fa-chevron-right text-slate-600 text-xs"></i>
                     </div>
                   );
                 })}
@@ -288,12 +345,10 @@
 
             {/* Features Brief Footer */}
             <div class="p-4 border-t border-slate-800 text-[11px] text-slate-400 space-y-1">
-              <div class="font-bold text-slate-300 mb-1">DocuMesh Features Brief:</div>
+              <div class="font-bold text-slate-300 mb-1">DocuMesh Engine Brief:</div>
+              <div>• SSE Streaming AI Reasoning</div>
               <div>• 7-Stage LangGraph State Machine</div>
               <div>• Multi-Provider LLM (OpenAI, Claude, Gemini)</div>
-              <div>• SQLite Checkpointing (Kill & Resume)</div>
-              <div>• Verbatim Quote Grounding (Zero Hallucination)</div>
-              <div>• Sub-30ms Hybrid BM25 & Vector Search</div>
             </div>
           </aside>
 
@@ -320,7 +375,7 @@
                   onClick={() => fileInputRef.current?.click()}
                   class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition border border-slate-700 flex items-center gap-1.5"
                 >
-                  <i class="fa-solid fa-paperclip"></i> Upload Files
+                  <i class="fa-solid fa-paperclip"></i> Attach File
                 </button>
                 <a
                   href={`/api/v1/projects/${projectId}/export-report`}
@@ -376,7 +431,7 @@
 
                         <div class="pt-2 flex gap-2">
                           <button
-                            onClick={() => sendMessage("Approve all findings")}
+                            onClick={() => sendStreamingMessage("Approve all findings")}
                             class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition shadow flex items-center justify-center gap-2"
                           >
                             <i class="fa-solid fa-check-double"></i> Batch Approve All Findings
@@ -420,11 +475,12 @@
                 </div>
               ))}
 
-              {(loading || uploading) && (
+              {/* Thinking Indicator & Uploading Indicator */}
+              {(loading || uploading || thinkingStage) && (
                 <div class="flex items-start">
-                  <div class="p-4 rounded-2xl glass-panel text-slate-400 text-xs flex items-center gap-3 border border-slate-800">
+                  <div class="p-4 rounded-2xl glass-panel text-slate-300 text-xs flex items-center gap-3 border border-slate-800 animate-pulse">
                     <i class="fa-solid fa-spinner fa-spin text-indigo-400 text-base"></i>
-                    <span>{uploading ? "Uploading & ingesting document file..." : "DocuMesh AI is reasoning over the document graph..."}</span>
+                    <span>{thinkingStage || (uploading ? "Uploading & ingesting document file..." : "DocuMesh AI is reasoning over the document graph...")}</span>
                   </div>
                 </div>
               )}
@@ -436,7 +492,7 @@
               {quickChips.map((chip, cIdx) => (
                 <button
                   key={cIdx}
-                  onClick={() => sendMessage(chip.action)}
+                  onClick={() => sendStreamingMessage(chip.action)}
                   class="px-3 py-1.5 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs border border-slate-800 hover:border-indigo-500/50 transition whitespace-nowrap"
                 >
                   {chip.label}
@@ -444,13 +500,13 @@
               ))}
             </div>
 
-            {/* Chat Input Bar with Attachment Paperclip Button */}
-            <form onSubmit={(e) => { e.preventDefault(); sendMessage(); }} class="p-6 pt-2 flex gap-3">
+            {/* Chat Input Bar */}
+            <form onSubmit={(e) => { e.preventDefault(); sendStreamingMessage(); }} class="p-6 pt-2 flex gap-3">
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 class="px-4 py-3.5 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-2xl border border-slate-800 hover:border-indigo-500/50 transition flex items-center justify-center text-base"
-                title="Upload document file (.docx, .pdf, .txt)"
+                title="Attach Document File (.docx, .pdf, .txt)"
               >
                 <i class="fa-solid fa-paperclip"></i>
               </button>
@@ -458,7 +514,7 @@
                 type="text"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Ask anything, type 'run analysis', or attach a file..."
+                placeholder="Ask anything or type 'run analysis'..."
                 class="flex-1 px-5 py-3.5 bg-slate-900 border border-slate-800 rounded-2xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition shadow-inner"
               />
               <button
@@ -470,6 +526,31 @@
               </button>
             </form>
           </main>
+
+          {/* ARTIFACT PREVIEW MODAL */}
+          {previewDoc && (
+            <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6 z-50">
+              <div class="glass-panel p-6 rounded-2xl max-w-2xl w-full border border-slate-700 shadow-2xl flex flex-col max-h-[80vh]">
+                <div class="flex justify-between items-center pb-4 border-b border-slate-800">
+                  <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-file-lines text-indigo-400 text-lg"></i>
+                    <h3 class="text-base font-bold text-slate-100">{previewDoc.filename}</h3>
+                  </div>
+                  <button onClick={() => setPreviewDoc(null)} class="text-slate-400 hover:text-slate-200">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                  </button>
+                </div>
+                <div class="p-4 my-4 bg-slate-900/90 rounded-xl font-mono text-xs text-slate-300 overflow-y-auto flex-1 whitespace-pre-wrap border border-slate-800">
+                  {previewDoc.extracted_text || "No preview text available."}
+                </div>
+                <div class="flex justify-end">
+                  <button onClick={() => setPreviewDoc(null)} class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg">
+                    Close Preview
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       );
     }

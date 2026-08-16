@@ -1,7 +1,10 @@
-"""Sessions & Chat Engine API Router with document-aware Q&A and branching trees."""
+"""Sessions & Chat Engine API Router with document-aware Q&A, SSE streaming, and branching trees."""
 
+import json
+import asyncio
 from typing import Optional, Dict, Any, List
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from src.session.tree import SessionTreeManager
@@ -70,6 +73,41 @@ async def post_session_message(project_id: str, tree_id: str, req: PostMessageRe
         tree_manager=_session_manager
     )
     return result
+
+
+@router.get("/{tree_id}/stream")
+async def stream_session_message(project_id: str, tree_id: str, q: str = Query(..., description="User query message")):
+    """Server-Sent Events (SSE) streaming endpoint for live thinking stages and AI response tokens."""
+    async def event_generator():
+        # Event 1: Thinking Stage 1
+        yield f"data: {json.dumps({'type': 'thinking', 'stage': 'Scanning document graph & vector index...'})}\n\n"
+        await asyncio.sleep(0.3)
+
+        # Event 2: Thinking Stage 2
+        yield f"data: {json.dumps({'type': 'thinking', 'stage': 'Evaluating LangGraph state machine & extracted facts...'})}\n\n"
+        await asyncio.sleep(0.3)
+
+        # Execute chat turn
+        result = await ChatEngine.process_user_chat(
+            project_id=project_id,
+            tree_id=tree_id,
+            user_message=q,
+            tree_manager=_session_manager
+        )
+
+        content = result["assistant_node"]["content"]
+        words = content.split(" ")
+
+        # Event 3: Stream content word chunks
+        for i in range(0, len(words), 3):
+            chunk = " ".join(words[i:i+3]) + " "
+            yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+            await asyncio.sleep(0.04)
+
+        # Event 4: Final Event with citations & action payload
+        yield f"data: {json.dumps({'type': 'done', 'assistant_node': result['assistant_node'], 'action_payload': result.get('action_payload')})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.post("/{tree_id}/branch")
