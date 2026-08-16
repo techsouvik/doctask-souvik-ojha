@@ -17,13 +17,16 @@ import kotlinx.serialization.json.Json
 
 class SuperDocsClient(
     private val apiKey: String,
-    private val baseUrl: String = "http://localhost:8000/api/v1",
+    private val baseUrl: String = "https://api.superdocs.app/v1",
     private val httpClient: HttpClient = createDefaultHttpClient()
 ) {
 
-    /** 1. Upload Document */
+    /**
+     * 1. Upload and parse document to SuperDocs HTML with stable chunk IDs.
+     */
     suspend fun uploadDocument(filename: String, fileBytes: ByteArray): DocumentUploadResponse = withContext(Dispatchers.IO) {
-        val response = httpClient.post("$baseUrl/projects/proj_default/documents") {
+        val response = httpClient.post("$baseUrl/uploads/parse") {
+            header("Authorization", "Bearer $apiKey")
             header("X-API-Key", apiKey)
             setBody(MultiPartFormDataContent(
                 formData {
@@ -36,12 +39,18 @@ class SuperDocsClient(
         response.body()
     }
 
-    /** 2. Send Chat Instruction with Kotlin Flow Streaming Events */
-    fun sendChatInstructionFlow(sessionId: String, instruction: String, documentHtml: String? = null): Flow<ChatInstructionResponse> = flow {
+    /**
+     * 2. Send targeted edit instruction to SuperDocs with Kotlin Flow streaming diffs.
+     */
+    fun sendChatInstructionFlow(
+        sessionId: String,
+        instruction: String,
+        documentHtml: String? = null
+    ): Flow<ChatInstructionResponse> = flow {
         val request = ChatInstructionRequest(sessionId, instruction, documentHtml)
-        // Stream progress event
         val response: ChatInstructionResponse = withContext(Dispatchers.IO) {
-            httpClient.post("$baseUrl/projects/proj_default/sessions/$sessionId/messages") {
+            httpClient.post("$baseUrl/chat") {
+                header("Authorization", "Bearer $apiKey")
                 header("X-API-Key", apiKey)
                 contentType(ContentType.Application.Json)
                 setBody(request)
@@ -50,10 +59,13 @@ class SuperDocsClient(
         emit(response)
     }.flowOn(Dispatchers.IO)
 
-    /** 3. Approve Proposed Changes */
+    /**
+     * 3. Approve proposed chunk diffs on SuperDocs.
+     */
     suspend fun approveChanges(jobId: String, approvedChunkIds: List<String>): ApprovalResponse = withContext(Dispatchers.IO) {
         val request = ApprovalRequest(jobId, approvedChunkIds)
-        val response = httpClient.post("$baseUrl/projects/proj_default/findings/approve") {
+        val response = httpClient.post("$baseUrl/chat/approve") {
+            header("Authorization", "Bearer $apiKey")
             header("X-API-Key", apiKey)
             contentType(ContentType.Application.Json)
             setBody(request)
@@ -61,10 +73,14 @@ class SuperDocsClient(
         response.body()
     }
 
-    /** 4. Export Finished File */
+    /**
+     * 4. Export finished file from SuperDocs (PDF, DOCX, HTML, MD).
+     * Note: Exports do not cost operations.
+     */
     suspend fun exportDocument(documentId: String, format: String = "pdf"): ExportResponse = withContext(Dispatchers.IO) {
         val request = ExportRequest(documentId, format)
-        val response = httpClient.post("$baseUrl/projects/proj_default/artifacts") {
+        val response = httpClient.post("$baseUrl/export") {
+            header("Authorization", "Bearer $apiKey")
             header("X-API-Key", apiKey)
             contentType(ContentType.Application.Json)
             setBody(request)
@@ -79,6 +95,7 @@ class SuperDocsClient(
                     json(Json {
                         ignoreUnknownKeys = true
                         prettyPrint = true
+                        encodeDefaults = true
                     })
                 }
             }
