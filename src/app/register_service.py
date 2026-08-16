@@ -16,6 +16,8 @@ class RegisterService:
             raise ValueError(f"Project Register deliverable not ready for project {project_id}. Complete Human/MCP Gate first.")
         return state.register
 
+    get_reconciled_register = get_register
+
     @staticmethod
     def generate_executive_report_html(project_id: str) -> str:
         """Generate styled executive HTML report."""
