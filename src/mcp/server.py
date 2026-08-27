@@ -1,13 +1,34 @@
-"""DocuMesh MCP Server for Machine-Driven Control (Behavior #4)."""
+"""DocuMesh MCP Server for Machine-Driven Control (Behavior #4).
+
+Exposes DocuMesh capabilities as a standard Model Context Protocol (MCP) server
+so other agents, IDEs, and automated workflows can drive the entire reconciliation lifecycle.
+"""
 
 import json
-from mcp.server.fastmcp import FastMCP
+from typing import Optional, Dict, Any
+
+try:
+    from mcp.server.mcpserver import MCPServer
+    mcp = MCPServer("DocuMesh Engine MCP")
+except ImportError:
+    try:
+        from mcp.server.fastmcp import FastMCP
+        mcp = FastMCP("DocuMesh Engine MCP")
+    except ImportError:
+        # Graceful fallback mock decorator if mcp is not installed
+        class FallbackMCP:
+            def tool(self):
+                def decorator(fn):
+                    return fn
+                return decorator
+            def run(self):
+                print("DocuMesh MCP Server running (fallback mode)")
+        mcp = FallbackMCP()
+
 from src.graph.state import PipelineState
 from src.graph.workflow import run_pipeline, build_documesh_graph
-from src.api.router import _ACTIVE_STATES
+from src.app.project_service import ProjectService, _ACTIVE_STATES
 from src.models.domain import FindingStatus
-
-mcp = FastMCP("DocuMesh Engine MCP")
 
 
 @mcp.tool()
@@ -16,8 +37,10 @@ def run_documesh_analysis(
     doc_folder: str = "/Users/souvikojha/doctask-souvik-ojha/test_data/greenfield_tech_park"
 ) -> str:
     """Run DocuMesh document pile analysis up to the Human/MCP Approval Gate."""
-    state = run_pipeline(doc_folder=doc_folder, project_id=project_id, run_id="mcp_run")
-    _ACTIVE_STATES[project_id] = state
+    state = ProjectService.get_project_state(project_id)
+    if not state.documents and doc_folder:
+        state.doc_folder = doc_folder
+    state = ProjectService.run_pipeline_for_project(project_id)
     return json.dumps({
         "project_id": project_id,
         "status": state.status,
@@ -32,10 +55,7 @@ def run_documesh_analysis(
 @mcp.tool()
 def get_documesh_status(project_id: str = "proj_greenfield_tech_park") -> str:
     """Check status of a DocuMesh project run."""
-    if project_id not in _ACTIVE_STATES:
-        run_documesh_analysis(project_id)
-
-    state = _ACTIVE_STATES[project_id]
+    state = ProjectService.get_project_state(project_id)
     return json.dumps({
         "project_id": project_id,
         "status": state.status,
@@ -48,10 +68,7 @@ def get_documesh_status(project_id: str = "proj_greenfield_tech_park") -> str:
 @mcp.tool()
 def list_documesh_findings(project_id: str = "proj_greenfield_tech_park") -> str:
     """List all findings (including planted errors and cross-document contradictions) for a project."""
-    if project_id not in _ACTIVE_STATES:
-        run_documesh_analysis(project_id)
-
-    state = _ACTIVE_STATES[project_id]
+    state = ProjectService.get_project_state(project_id)
     return json.dumps([f.model_dump() for f in state.findings], indent=2, default=str)
 
 
@@ -63,10 +80,7 @@ def approve_documesh_finding(
     feedback: str = ""
 ) -> str:
     """Explicitly approve or reject a finding at the Human/MCP Gate."""
-    if project_id not in _ACTIVE_STATES:
-        return json.dumps({"error": "Project not found"})
-
-    state = _ACTIVE_STATES[project_id]
+    state = ProjectService.get_project_state(project_id)
     target = None
 
     for f in state.findings:
@@ -91,18 +105,15 @@ def approve_documesh_finding(
     return json.dumps({
         "finding_id": finding_id,
         "new_status": target.status.value,
-        "remaining_pending": len(_ACTIVE_STATES[project_id].pending_findings),
-        "pipeline_status": _ACTIVE_STATES[project_id].status
+        "remaining_pending": len(_ACTIVE_STATES.get(project_id, state).pending_findings),
+        "pipeline_status": _ACTIVE_STATES.get(project_id, state).status
     }, indent=2)
 
 
 @mcp.tool()
 def get_documesh_register(project_id: str = "proj_greenfield_tech_park") -> str:
     """Get the final reconciled Project Register deliverable."""
-    if project_id not in _ACTIVE_STATES:
-        run_documesh_analysis(project_id)
-
-    state = _ACTIVE_STATES[project_id]
+    state = ProjectService.get_project_state(project_id)
     if not state.register:
         return json.dumps({"error": "Register deliverable not ready. Approve pending findings at GATE first."})
 
@@ -110,4 +121,7 @@ def get_documesh_register(project_id: str = "proj_greenfield_tech_park") -> str:
 
 
 if __name__ == "__main__":
-    mcp.run()
+    if hasattr(mcp, "run"):
+        mcp.run()
+    else:
+        print("DocuMesh MCP Server ready.")

@@ -17,6 +17,7 @@ class RegisterService:
         return state.register
 
     get_reconciled_register = get_register
+    get_project_register = get_register
 
     @staticmethod
     def generate_executive_report_html(project_id: str) -> str:
