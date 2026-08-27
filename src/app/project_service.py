@@ -45,21 +45,45 @@ class ProjectService:
 
     @staticmethod
     def list_all_projects(tenant_id: str = "tenant_default") -> list[str]:
-        """List all projects persistently stored in DB and active memory."""
+        """List all projects persistently stored in DB and active memory (excluding test suites)."""
         from src.models.database import list_saved_projects_db
         db_projs = list_saved_projects_db(tenant_id=tenant_id)
         all_projs = set(db_projs).union(_ACTIVE_STATES.keys())
         all_projs.add("proj_greenfield_tech_park")
-        # Sort so greenfield is at top or sorted cleanly
-        return sorted(list(all_projs), key=lambda x: (x != "proj_greenfield_tech_park", x))
+
+        # Exclude automated stress/test project IDs
+        filtered = [
+            p for p in all_projs
+            if not p.startswith("proj_stress_")
+            and not p.startswith("proj_lock_")
+            and not p.startswith("test_")
+            and not p.startswith("proj_persist_")
+            and not p.startswith("proj_api_suite_")
+            and not p.startswith("proj_application_layer_")
+            and not p.startswith("proj_chat_test")
+            and not p.startswith("proj_langgraph_v1_")
+            and not p.startswith("proj_machine_driven_")
+            and not p.startswith("proj_mcp_direct_")
+            and not p.startswith("proj_test_")
+            and not p.startswith("proj_orchestrator_test")
+            and not p.startswith("proj_user_")
+            and not p.startswith("proj_alpha_")
+            and not p.startswith("proj_beta_")
+            and not p.startswith("proj_audit_")
+        ]
+
+        if not filtered:
+            filtered = ["proj_greenfield_tech_park"]
+
+        return sorted(filtered, key=lambda x: (x != "proj_greenfield_tech_park", x))
 
     @staticmethod
     def get_project_state(project_id: str, tenant_id: str = "tenant_default") -> PipelineState:
-        """Get or restore project pipeline state."""
+        """Get or restore project pipeline state from memory or persistent DB checkpoint."""
         if project_id in _ACTIVE_STATES:
             return _ACTIVE_STATES[project_id]
 
-        # Attempt restore from DB checkpoint
+        # Attempt restore from persistent DB checkpoint
         checkpoint = load_latest_checkpoint(project_id, tenant_id=tenant_id)
         if checkpoint:
             logger.info("project_state_restored_from_checkpoint", project_id=project_id, tenant_id=tenant_id, node=checkpoint.get("current_node"))
@@ -67,11 +91,12 @@ class ProjectService:
             _ACTIVE_STATES[project_id] = state
             return state
 
-        # If Seed Greenfield project, load seed corpus
+        # If Seed Greenfield project, load seed corpus and save initial checkpoint
         if project_id in ["proj_greenfield_tech_park", "proj_live_demo", "proj_live_run_workspace"]:
             folder = "/Users/souvikojha/doctask-souvik-ojha/test_data/greenfield_tech_park"
             state = run_pipeline(doc_folder=folder, project_id=project_id)
             _ACTIVE_STATES[project_id] = state
+            save_checkpoint(project_id, state.current_node, state.model_dump(), tenant_id=tenant_id)
             return state
 
         # Fresh empty project workspace for new user sessions
@@ -86,6 +111,7 @@ class ProjectService:
             pending_findings=[]
         )
         _ACTIVE_STATES[project_id] = state
+        save_checkpoint(project_id, "INIT", state.model_dump(), tenant_id=tenant_id)
         return state
 
     @staticmethod

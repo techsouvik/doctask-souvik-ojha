@@ -1,9 +1,8 @@
 """Sessions & Chat Engine API Router with document-aware Q&A, SSE streaming, branching trees, and project conversion."""
 
 import json
-import asyncio
 from typing import Optional, Dict, Any, List
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -81,38 +80,51 @@ async def post_session_message(project_id: str, tree_id: str, req: PostMessageRe
 
 
 @router.get("/{tree_id}/stream")
-async def stream_session_message(project_id: str, tree_id: str, q: str = Query(..., description="User query message")):
-    """Server-Sent Events (SSE) streaming endpoint for live thinking stages and AI response tokens."""
+async def stream_session_message_get(
+    project_id: str,
+    tree_id: str,
+    q: str = Query(..., description="User query message"),
+    parent_node_id: Optional[str] = Query(None, description="Parent message node ID")
+):
+    """Server-Sent Events (SSE) streaming endpoint via GET."""
+    return _build_sse_stream(project_id, tree_id, q, parent_node_id)
+
+
+@router.post("/{tree_id}/stream")
+async def stream_session_message_post(
+    project_id: str,
+    tree_id: str,
+    req: PostMessageRequest
+):
+    """Server-Sent Events (SSE) streaming endpoint via POST."""
+    return _build_sse_stream(project_id, tree_id, req.content, req.parent_node_id)
+
+
+def _build_sse_stream(project_id: str, tree_id: str, content: str, parent_node_id: Optional[str]):
     async def event_generator():
-        # Event 1: Thinking Stage 1
-        yield f"data: {json.dumps({'type': 'thinking', 'stage': 'Scanning document graph & vector index...'})}\n\n"
-        await asyncio.sleep(0.2)
+        try:
+            async for event in ChatEngine.process_user_chat_stream(
+                project_id=project_id,
+                tree_id=tree_id,
+                user_message=content,
+                parent_node_id=parent_node_id,
+                tree_manager=_session_manager
+            ):
+                payload_str = json.dumps(event, default=str)
+                yield f"data: {payload_str}\n\n"
+        except Exception as e:
+            err_payload = json.dumps({"type": "error", "error": str(e)})
+            yield f"data: {err_payload}\n\n"
 
-        # Event 2: Thinking Stage 2
-        yield f"data: {json.dumps({'type': 'thinking', 'stage': 'Evaluating LangGraph state machine & extracted facts...'})}\n\n"
-        await asyncio.sleep(0.2)
-
-        # Execute chat turn
-        result = await ChatEngine.process_user_chat(
-            project_id=project_id,
-            tree_id=tree_id,
-            user_message=q,
-            tree_manager=_session_manager
-        )
-
-        content = result["assistant_node"]["content"]
-        words = content.split(" ")
-
-        # Event 3: Stream content word chunks
-        for i in range(0, len(words), 3):
-            chunk = " ".join(words[i:i+3]) + " "
-            yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
-            await asyncio.sleep(0.03)
-
-        # Event 4: Final Event with citations & action payload
-        yield f"data: {json.dumps({'type': 'done', 'assistant_node': result['assistant_node'], 'action_payload': result.get('action_payload')})}\n\n"
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 
 @router.post("/{tree_id}/convert-to-project")

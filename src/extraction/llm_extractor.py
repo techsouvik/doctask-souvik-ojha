@@ -41,32 +41,48 @@ async def extract_facts_llm_async(doc: DocumentMetadata, provider_config: Option
         return extract_facts_heuristic(doc)
 
     try:
-        from langchain_core.prompts import ChatPromptTemplate
-
-        structured_model = chat_model.with_structured_output(LLMExtractionSchema)
-
-        prompt = ChatPromptTemplate.from_messages([
-            ("system",
-             "You are an expert construction document analyst operating under zero-hallucination constraints.\n"
-             "For EVERY fact you extract, you MUST provide an exact_quote containing verbatim text from the document.\n"
-             "DO NOT hallucinate or summarize in exact_quote. Ground every fact strictly in the document text."),
-            ("user", "Document Filename: {filename}\nDocument Type: {doc_type}\n\nText:\n{text}")
-        ])
-
-        chain = prompt | structured_model
-
-        raw_result = await chain.ainvoke({
-            "filename": doc.filename,
-            "doc_type": doc.doc_type.value,
-            "text": (doc.extracted_text or "")[:12000]
-        })
-
-        if isinstance(raw_result, dict):
-            result = LLMExtractionSchema(**raw_result)
-        elif isinstance(raw_result, LLMExtractionSchema):
-            result = raw_result
+        if hasattr(chat_model, "generate_structured"):
+            prompt_text = (
+                f"Document Filename: {doc.filename}\n"
+                f"Document Type: {doc.doc_type.value}\n\n"
+                f"Text:\n{(doc.extracted_text or '')[:12000]}"
+            )
+            result = chat_model.generate_structured(
+                prompt=prompt_text,
+                schema_class=LLMExtractionSchema,
+                system_instruction=(
+                    "You are an expert construction document analyst operating under zero-hallucination constraints.\n"
+                    "For EVERY fact you extract, you MUST provide an exact_quote containing verbatim text from the document.\n"
+                    "DO NOT hallucinate or summarize in exact_quote. Ground every fact strictly in the document text."
+                )
+            )
         else:
-            result = LLMExtractionSchema()
+            from langchain_core.prompts import ChatPromptTemplate
+
+            structured_model = chat_model.with_structured_output(LLMExtractionSchema)
+
+            prompt = ChatPromptTemplate.from_messages([
+                ("system",
+                 "You are an expert construction document analyst operating under zero-hallucination constraints.\n"
+                 "For EVERY fact you extract, you MUST provide an exact_quote containing verbatim text from the document.\n"
+                 "DO NOT hallucinate or summarize in exact_quote. Ground every fact strictly in the document text."),
+                ("user", "Document Filename: {filename}\nDocument Type: {doc_type}\n\nText:\n{text}")
+            ])
+
+            chain = prompt | structured_model
+
+            raw_result = await chain.ainvoke({
+                "filename": doc.filename,
+                "doc_type": doc.doc_type.value,
+                "text": (doc.extracted_text or "")[:12000]
+            })
+
+            if isinstance(raw_result, dict):
+                result = LLMExtractionSchema(**raw_result)
+            elif isinstance(raw_result, LLMExtractionSchema):
+                result = raw_result
+            else:
+                result = LLMExtractionSchema()
 
         extracted_facts: List[ExtractedFact] = []
         full_text = doc.extracted_text or ""

@@ -1,0 +1,155 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 10% 4.5%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 4.5%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 5.9% 10%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 240 4.9% 83.9%;
+    --radius: 0.625rem;
+
+    --sidebar-background: 240 10% 4%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 14%;
+    --sidebar-accent: 240 3.7% 12%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased selection:bg-zinc-800 selection:text-zinc-100;
+    color-scheme: dark;
+  }
+}
+
+/* Minimalist Scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Markdown prose */
+.prose-minimal {
+  color: #e4e4e7;
+  font-size: 0.925rem;
+  line-height: 1.65;
+}
+
+.prose-minimal h1, .prose-minimal h2, .prose-minimal h3 {
+  color: #fafafa;
+  font-weight: 600;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.015em;
+}
+
+.prose-minimal h1 { font-size: 1.25rem; }
+.prose-minimal h2 { font-size: 1.1rem; }
+.prose-minimal h3 { font-size: 1rem; }
+
+.prose-minimal p {
+  margin-bottom: 0.75rem;
+}
+
+.prose-minimal p:last-child {
+  margin-bottom: 0;
+}
+
+.prose-minimal ul, .prose-minimal ol {
+  margin-left: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.prose-minimal ul {
+  list-style-type: disc;
+}
+
+.prose-minimal ol {
+  list-style-type: decimal;
+}
+
+.prose-minimal li {
+  margin-bottom: 0.25rem;
+}
+
+.prose-minimal strong {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.prose-minimal code {
+  font-family: 'JetBrains Mono', monospace;
+  background: #18181b;
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.25rem;
+  font-size: 0.85em;
+  color: #e4e4e7;
+  border: 1px solid #27272a;
+}
+
+.prose-minimal pre {
+  background: #121215;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  margin-bottom: 0.75rem;
+  border: 1px solid #27272a;
+}
+
+.prose-minimal pre code {
+  background: transparent;
+  padding: 0;
+  border: none;
+}
+
+.prose-minimal blockquote {
+  border-left: 2px solid #52525b;
+  padding-left: 0.75rem;
+  color: #a1a1aa;
+  font-style: italic;
+  margin-bottom: 0.75rem;
+}
+
+.prose-minimal table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0.75rem;
+}
+
+.prose-minimal th, .prose-minimal td {
+  border: 1px solid #27272a;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+.prose-minimal th {
+  background: #18181b;
+  color: #d4d4d8;
+  font-weight: 600;
+}

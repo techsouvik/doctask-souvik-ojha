@@ -34,8 +34,13 @@ for r in all_routers:
 
 app.include_router(v1_router)
 
+from fastapi.staticfiles import StaticFiles
+
 # UI Directory
 UI_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "ui")
+ASSETS_DIR = os.path.join(UI_DIR, "assets")
+os.makedirs(ASSETS_DIR, exist_ok=True)
+app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
 
 
 @app.get("/", response_class=HTMLResponse)

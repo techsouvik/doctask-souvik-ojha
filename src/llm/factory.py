@@ -39,18 +39,18 @@ def get_llm_instance(config: Optional[ModelProviderConfig] = None) -> Optional[A
             max_tokens=cfg.max_tokens or 4096
         )
 
-    # 2. GOOGLE GEMINI NATIVE
+    # 2. GOOGLE GEMINI NATIVE (using official google-genai SDK)
     elif p_type == LLMProviderType.GEMINI:
         key = api_key or settings.gemini_api_key or settings.google_api_key or os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
         if not key:
             logger.info("gemini_key_missing_falling_back")
             return None
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        model = cfg.model_name or settings.default_gemini_model
-        logger.info("llm_factory_created_gemini", model=model)
-        return ChatGoogleGenerativeAI(
-            model=model,
-            google_api_key=key,
+        from src.llm.genai_client import GeminiGenAIClient
+        model = cfg.model_name or settings.default_gemini_model or "gemini-3.8-flash"
+        logger.info("llm_factory_created_gemini_google_genai", model=model)
+        return GeminiGenAIClient(
+            api_key=key,
+            model_name=model,
             temperature=cfg.temperature
         )
 

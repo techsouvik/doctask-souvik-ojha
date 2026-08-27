@@ -13,16 +13,16 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./documesh.db"
 
     # Multi-Model LLM Settings
-    default_provider: str = "openai"  # "openai", "openai_compatible", "anthropic", "gemini"
+    default_provider: str = "gemini"  # "gemini", "openai", "openai_compatible", "anthropic"
     openai_api_key: str = ""
     openai_base_url: str = ""        # Custom base URL (Together, Ollama, OpenRouter, vLLM)
     anthropic_api_key: str = ""
     gemini_api_key: str = ""
     google_api_key: str = ""
 
-    default_model: str = "gpt-4o-mini"
+    default_model: str = "gemini-3.8-flash"
     default_claude_model: str = "claude-3-5-sonnet-20241022"
-    default_gemini_model: str = "gemini-1.5-flash"
+    default_gemini_model: str = "gemini-3.8-flash"
     fallback_model: str = "gpt-3.5-turbo"
     mock_llm_if_no_key: bool = True
 

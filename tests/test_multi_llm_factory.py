@@ -45,3 +45,17 @@ def test_llm_factory_offline_fallback():
         if old_key:
             os.environ["OPENAI_API_KEY"] = old_key
         settings.openai_api_key = old_settings_key
+
+
+def test_llm_factory_gemini_38_flash():
+    cfg = ModelProviderConfig(
+        provider_type=LLMProviderType.GEMINI,
+        api_key="test_gemini_key",
+        model_name="gemini-3.8-flash",
+        temperature=0.0
+    )
+    llm = get_llm_instance(cfg)
+    assert llm is not None
+    assert llm.model_name == "gemini-3.8-flash"
+    assert hasattr(llm, "astream")
+    assert hasattr(llm, "ainvoke")
