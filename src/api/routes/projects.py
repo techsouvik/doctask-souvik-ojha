@@ -32,8 +32,8 @@ def create_project(req: CreateProjectRequest):
 
 @router.get("")
 def list_projects():
-    """List active project workspaces."""
-    return {"projects": list(_ACTIVE_STATES.keys())}
+    """List all persistently stored project workspaces."""
+    return {"projects": ProjectService.list_all_projects()}
 
 
 @router.post("/{project_id}/run")

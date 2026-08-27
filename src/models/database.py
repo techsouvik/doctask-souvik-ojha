@@ -162,3 +162,21 @@ def load_cached_facts_db(project_id: str, checksum: str, tenant_id: str = "tenan
         return None
     finally:
         session.close()
+
+
+def list_saved_projects_db(tenant_id: str = "tenant_default") -> List[str]:
+    """List all unique project IDs persistently stored in database checkpoints."""
+    get_db_engine()
+    if _SESSION_FACTORY is None:
+        return []
+
+    session = _SESSION_FACTORY()
+    try:
+        results = session.query(CheckpointModel.project_id).distinct().all()
+        return [r[0] for r in results if r[0]]
+    except Exception as e:
+        print(f"Error listing saved projects: {e}")
+        return []
+    finally:
+        session.close()
+

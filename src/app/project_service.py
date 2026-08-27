@@ -34,11 +34,24 @@ class ProjectService:
             documents=[],
             facts=[],
             findings=[],
-            pending_findings=[]
+            pending_findings=[],
+            current_node="INIT",
+            status="CREATED"
         )
         _ACTIVE_STATES[project_id] = state
-        logger.info("project_created", project_id=project_id, doc_folder=folder, tenant_id=tenant_id)
+        save_checkpoint(project_id, "INIT", state.model_dump(), tenant_id=tenant_id)
+        logger.info("project_created_and_persisted", project_id=project_id, doc_folder=folder, tenant_id=tenant_id)
         return project_id
+
+    @staticmethod
+    def list_all_projects(tenant_id: str = "tenant_default") -> list[str]:
+        """List all projects persistently stored in DB and active memory."""
+        from src.models.database import list_saved_projects_db
+        db_projs = list_saved_projects_db(tenant_id=tenant_id)
+        all_projs = set(db_projs).union(_ACTIVE_STATES.keys())
+        all_projs.add("proj_greenfield_tech_park")
+        # Sort so greenfield is at top or sorted cleanly
+        return sorted(list(all_projs), key=lambda x: (x != "proj_greenfield_tech_park", x))
 
     @staticmethod
     def get_project_state(project_id: str, tenant_id: str = "tenant_default") -> PipelineState:
