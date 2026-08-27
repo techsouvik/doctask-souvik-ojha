@@ -130,6 +130,7 @@
       const [register, setRegister] = useState(null);
       const [pendingCount, setPendingCount] = useState(0);
       const [graphData, setGraphData] = useState({ nodes: [], edges: [] });
+      const [isRunningPipeline, setIsRunningPipeline] = useState(false);
       
       // UI Modals & Sidebars
       const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -160,7 +161,7 @@
         {
           id: "m_welcome_" + projectId,
           role: "assistant",
-          content: `### Welcome to Workspace **${projectId}** 👋\n\nThis is a clean, fresh workspace with **0 documents**.\n\n• Attach documents (.docx, .pdf, .txt) using the 📎 button or click **Upload Documents**.\n• Once uploaded, ask questions or start the reconciliation audit!\n• Press \`Cmd+K\` anytime to search document chunks.`,
+          content: `### Welcome to Workspace **${projectId}** 👋\n\nThis is a clean, fresh workspace.\n\n• Attach documents (.docx, .pdf, .txt) using the 📎 button or click **Upload Documents** above.\n• Once uploaded, ask questions or start the reconciliation audit!\n• Press \`Cmd+K\` anytime to search document chunks.`,
           action_payload: null,
           citations: []
         }
@@ -172,7 +173,7 @@
             {
               id: "m_welcome_" + projectId,
               role: "assistant",
-              content: `### Welcome to Workspace **${projectId}** 👋\n\nThis is a clean, fresh workspace with **0 documents**.\n\n• Attach documents (.docx, .pdf, .txt) using the 📎 button or click **Upload Documents**.\n• Once uploaded, ask questions or start the reconciliation audit!\n• Press \`Cmd+K\` anytime to search document chunks.`,
+              content: `### Welcome to Workspace **${projectId}** 👋\n\nThis is a clean, fresh workspace.\n\n• Attach documents (.docx, .pdf, .txt) using the 📎 button or click **Upload Documents** above.\n• Once uploaded, ask questions or start the reconciliation audit!\n• Press \`Cmd+K\` anytime to search document chunks.`,
               action_payload: null,
               citations: []
             }
@@ -293,7 +294,8 @@
 
       // Trigger 7-Stage Pipeline Run
       const runPipeline = async () => {
-        showToast("Running LangGraph reconciliation audit...", "info");
+        setIsRunningPipeline(true);
+        showToast("Starting 7-Stage LangGraph Reconciliation...", "info");
         try {
           const res = await fetch(`/api/v1/projects/${projectId}/run`, { method: "POST" });
           if (res.ok) {
@@ -301,7 +303,14 @@
             setPipelineStatus(data.status);
             setCurrentNode(data.current_node);
             setPendingCount(data.pending_findings_count || 0);
-            showToast(`Audit complete: Paused at ${data.current_node}!`, "success");
+            
+            // Re-fetch findings directly
+            const fRes = await fetch(`/api/v1/projects/${projectId}/findings`);
+            const fData = fRes.ok ? await fRes.json() : { findings: [] };
+            const loadedFindings = fData.findings || [];
+            setFindings(loadedFindings);
+
+            showToast(`Audit Complete: Paused at Human Gate (${loadedFindings.length} findings)`, "success");
             loadProject(projectId);
 
             setChatMessages(prev => [
@@ -309,16 +318,18 @@
               {
                 id: "m_" + Date.now(),
                 role: "assistant",
-                content: `### ⚡ Pipeline Execution Complete\n\n• **Processed Documents:** ${data.documents_count}\n• **Extracted Facts:** ${data.facts_count}\n• **Pending Discrepancies:** **${data.pending_findings_count}**\n\nThe engine is paused at the **Human Gate**. Click the button below to review and approve findings!`,
+                content: `### ⚡ LangGraph Reconciliation Audit Complete\n\n• **Processed Documents:** ${data.documents_count}\n• **Extracted Facts:** ${data.facts_count} grounded assertions\n• **Detected Discrepancies:** **${loadedFindings.length} findings**\n\nThe state machine is paused at **Stage 6: Human Gate**. Review the findings below or click **Approve All** to generate the Project Register!`,
                 action_payload: {
                   type: "GATE_FINDINGS",
-                  findings: findings
+                  findings: loadedFindings
                 }
               }
             ]);
           }
         } catch (e) {
           showToast("Pipeline run failed.", "error");
+        } finally {
+          setIsRunningPipeline(false);
         }
       };
 
@@ -342,7 +353,7 @@
       // Batch Approve All
       const batchApproveAll = async () => {
         try {
-          showToast("Batch approving all findings...", "info");
+          showToast("Batch approving all findings & compiling register...", "info");
           const res = await fetch(`/api/v1/projects/${projectId}/findings/batch-approve`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -352,6 +363,16 @@
             showToast("All findings approved! Register generated.", "success");
             loadProject(projectId);
             setActiveTab("register");
+
+            setChatMessages(prev => [
+              ...prev,
+              {
+                id: "m_" + Date.now(),
+                role: "assistant",
+                content: `### 🎉 Stage 7: Deliver (Complete)\n\nAll contractual and billing findings have been **APPROVED**. The state machine has completed execution and compiled the verified **Reconciled Project Register**!\n\n• Click the **Project Register** tab or export via SuperDocs above.`,
+                action_payload: null
+              }
+            ]);
           }
         } catch (e) {
           showToast("Batch approve failed", "error");
@@ -656,10 +677,10 @@
 
       // Stage Name Formatter
       const getStageName = () => {
-        if (pipelineStatus === "AWAITING_HUMAN_GATE") return "Stage 6: Human Gate (Awaiting Review)";
+        if (pipelineStatus === "AWAITING_HUMAN_GATE") return "Stage 6: Human Gate (Action Required)";
         if (pipelineStatus === "COMPLETED" || pipelineStatus === "DELIVER") return "Stage 7: Deliver (Complete)";
         if (pipelineStatus === "CREATED" || pipelineStatus === "INIT") return "Stage 1: Ready to Ingest";
-        return `Current Stage: ${currentNode || pipelineStatus}`;
+        return `Stage: ${currentNode || pipelineStatus}`;
       };
 
       // Filtered Findings
@@ -904,21 +925,22 @@
                 {documents.length > 0 && (pipelineStatus === "CREATED" || pipelineStatus === "INIT") && (
                   <button
                     onClick={runPipeline}
-                    class="px-4 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition shadow-lg shadow-indigo-600/30 flex items-center gap-1.5 animate-pulse-soft"
+                    disabled={isRunningPipeline}
+                    class="px-4 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg transition shadow-lg shadow-indigo-600/30 flex items-center gap-1.5 animate-pulse-soft"
                   >
-                    <i class="fa-solid fa-play text-xs"></i>
-                    <span>Run Reconciliation Audit</span>
+                    <i class={`fa-solid ${isRunningPipeline ? "fa-spinner fa-spin" : "fa-play"} text-xs`}></i>
+                    <span>{isRunningPipeline ? "Reconciling..." : "Run Reconciliation Audit"}</span>
                   </button>
                 )}
 
-                {/* 3. If Paused at Human Gate: Show Review Discrepancies Action */}
+                {/* 3. If Paused at Human Gate: Show 1-Click Approve All Button */}
                 {pipelineStatus === "AWAITING_HUMAN_GATE" && (
                   <button
-                    onClick={() => setActiveTab("findings")}
-                    class="px-3.5 py-1.5 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg transition shadow flex items-center gap-1.5"
+                    onClick={batchApproveAll}
+                    class="px-3.5 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition shadow flex items-center gap-1.5 shadow-lg shadow-emerald-600/20"
                   >
-                    <i class="fa-solid fa-scale-balanced"></i>
-                    <span>Review Discrepancies ({pendingCount})</span>
+                    <i class="fa-solid fa-check-double"></i>
+                    <span>Approve All & Deliver ({pendingCount || findings.length})</span>
                   </button>
                 )}
 
@@ -934,6 +956,35 @@
                 )}
               </div>
             </header>
+
+            {/* PROMINENT ACTION BANNER WHEN AT HUMAN GATE */}
+            {pipelineStatus === "AWAITING_HUMAN_GATE" && (
+              <div class="px-6 py-2.5 bg-gradient-to-r from-amber-950/90 via-amber-900/60 to-slate-950 border-b border-amber-500/40 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-3 text-xs">
+                  <div class="w-6 h-6 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center font-bold text-xs shrink-0">
+                    <i class="fa-solid fa-scale-balanced"></i>
+                  </div>
+                  <div>
+                    <span class="font-bold text-amber-200">Stage 6: Human Gate Review</span>
+                    <span class="text-amber-300/80 ml-2">Audit complete! Detected <strong>{pendingCount || findings.length} cross-document findings</strong> awaiting decision before final register generation.</span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => setActiveTab("findings")}
+                    class="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-xs font-semibold"
+                  >
+                    Inspect Items
+                  </button>
+                  <button
+                    onClick={batchApproveAll}
+                    class="px-3.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold shadow-lg shadow-emerald-600/30 flex items-center gap-1.5"
+                  >
+                    <i class="fa-solid fa-check-double"></i> Approve All & Generate Register
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* 7-STAGE PIPELINE STEPPER BAR */}
             <div class="px-6 py-2 border-b border-slate-800/80 bg-slate-950/60 flex items-center justify-between text-[10px] font-mono shrink-0 overflow-x-auto custom-scrollbar">
@@ -1002,16 +1053,16 @@
                           {m.action_payload && m.action_payload.type === "GATE_FINDINGS" && (
                             <div class="p-3 bg-slate-900/90 border border-amber-500/30 rounded-xl space-y-2 mt-2">
                               <div class="flex items-center justify-between text-xs font-bold text-amber-300">
-                                <span><i class="fa-solid fa-triangle-exclamation mr-1.5"></i> Detected Discrepancies ({findings.length})</span>
+                                <span><i class="fa-solid fa-triangle-exclamation mr-1.5"></i> Detected Discrepancies ({(m.action_payload.findings || findings).length})</span>
                                 <button
                                   onClick={batchApproveAll}
-                                  class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-semibold text-[11px] transition"
+                                  class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-semibold text-[11px] transition shadow"
                                 >
-                                  Approve All & Generate Register
+                                  Approve All & Deliver
                                 </button>
                               </div>
                               <div class="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
-                                {findings.map(f => (
+                                {(m.action_payload.findings || findings).map(f => (
                                   <div key={f.id} class="p-2 bg-slate-950/80 rounded border border-slate-800 text-[11px] flex items-center justify-between">
                                     <div class="truncate mr-2">
                                       <span class="font-bold text-amber-400 mr-2">[{f.id}]</span>
@@ -1081,7 +1132,7 @@
                         type="text"
                         value={chatInput}
                         onChange={(e) => setChatInput(e.target.value)}
-                        placeholder="Ask about contracts, billing amounts, or type 'run reconciliation audit'..."
+                        placeholder="Ask questions or type 'run reconciliation audit'..."
                         class="flex-1 bg-transparent text-xs text-slate-100 placeholder-slate-500 focus:outline-none"
                       />
 
