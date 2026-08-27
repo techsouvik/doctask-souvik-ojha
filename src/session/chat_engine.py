@@ -47,20 +47,38 @@ class ChatEngine:
         # ---------------------------------------------------------------------
         # IN-CHAT ACTION 1: TRIGGER LANGGRAPH PIPELINE RUN
         # ---------------------------------------------------------------------
-        if any(kw in msg_lower for k in ["run", "analyze", "scan", "start", "audit"] for kw in [k]) and ("document" in msg_lower or "pipeline" in msg_lower or "pile" in msg_lower or "analysis" in msg_lower):
-            updated_state = ProjectService.run_pipeline_for_project(project_id)
-            assistant_reply = (
-                f"I've executed the 7-stage LangGraph state machine across the **{len(updated_state.documents)} documents** in the pile.\n\n"
-                f"**Execution Summary:**\n"
-                f"• Ingested & Classified: {len(updated_state.documents)} files\n"
-                f"• Extracted & Grounded: {len(updated_state.facts)} facts\n"
-                f"• Detected Findings: **{len(updated_state.pending_findings)} discrepancies** requiring approval\n\n"
-                f"The system is currently paused at the **Human/MCP Approval Gate**. You can review and approve findings directly in this chat!"
-            )
-            action_payload = {
-                "type": "FINDINGS_APPROVAL_GATE",
-                "pending_findings": [f.model_dump() for f in updated_state.pending_findings]
-            }
+        is_run_command = (
+            any(w in msg_lower for w in ["reconcil", "audit", "pipeline"]) or
+            (any(w in msg_lower for w in ["run", "start", "execute", "analyze", "scan"]) and
+             any(w in msg_lower for w in ["doc", "pile", "check", "audit", "reconcil", "analysis", "all"])) or
+            msg_lower.strip() in ["run", "start", "audit", "reconcile", "reconciliation", "run reconciliation audit", "run audit", "start audit"]
+        )
+
+        if is_run_command:
+            if not state.documents and not (os.path.exists(state.doc_folder) and os.listdir(state.doc_folder)):
+                assistant_reply = (
+                    "### ⚠️ No Documents in Workspace\n\n"
+                    "No documents have been uploaded to this workspace yet.\n\n"
+                    "• Attach your documents (`.docx`, `.pdf`, `.txt`) using the 📎 button in the chat input or click **Upload Documents**.\n"
+                    "• Once uploaded, type **'run reconciliation audit'** to start the analysis!"
+                )
+                action_payload = None
+            else:
+                updated_state = ProjectService.run_pipeline_for_project(project_id)
+                findings_to_show = updated_state.pending_findings if updated_state.pending_findings else updated_state.findings
+                assistant_reply = (
+                    f"### ⚡ LangGraph Reconciliation Audit Complete\n\n"
+                    f"I've executed the 7-stage state machine across the **{len(updated_state.documents)} documents** in this pile.\n\n"
+                    f"**Execution Summary:**\n"
+                    f"• **Ingested & Classified:** {len(updated_state.documents)} files\n"
+                    f"• **Extracted Facts:** {len(updated_state.facts)} grounded assertions\n"
+                    f"• **Detected Discrepancies:** **{len(findings_to_show)} findings** requiring approval\n\n"
+                    f"The system is paused at **Stage 6: Human Gate**. You can review and approve each discrepancy below!"
+                )
+                action_payload = {
+                    "type": "GATE_FINDINGS",
+                    "findings": [f.model_dump() for f in findings_to_show]
+                }
 
         # ---------------------------------------------------------------------
         # IN-CHAT ACTION 2: BATCH APPROVE FINDINGS
