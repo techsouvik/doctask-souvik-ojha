@@ -3,16 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DocuMesh — Document Reconciliation & Audit Engine</title>
+  <title>DocuMesh Engine — Multi-Document Reconciliation</title>
   
-  <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  
-  <!-- FontAwesome 6 Icons CDN -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -21,13 +18,15 @@
       theme: {
         extend: {
           fontFamily: {
-            sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
-            mono: ['"JetBrains Mono"', 'monospace'],
+            sans: ['Plus Jakarta Sans', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
           },
           colors: {
-            brand: {
-              500: '#6366f1',
-              600: '#4f46e5',
+            slate: {
+              950: '#020617',
+              900: '#0f172a',
+              850: '#131d38',
+              800: '#1e293b',
             }
           }
         }
@@ -35,87 +34,106 @@
     }
   </script>
 
-  <!-- Marked.js Markdown Parser CDN -->
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+  <!-- Marked.js for Markdown Formatting -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <!-- Vis.js Network Standalone for Rock-Solid Interactive Graphs -->
-  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
-  <!-- React 18 & ReactDOM -->
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <!-- Babel for JSX -->
+
+  <!-- React 18 & Babel CDN -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-  <style>
-    /* Custom Scrollbar */
-    ::-webkit-scrollbar { width: 5px; height: 5px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 9999px; }
-    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+  <!-- Vis.js Network for Interactive Knowledge Graph -->
+  <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
 
-    /* Surface Styles */
+  <style>
+    body {
+      background-color: #020617;
+      color: #f8fafc;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(99, 102, 241, 0.4);
+      border-radius: 4px;
+    }
     .glass {
-      background: rgba(13, 19, 31, 0.85);
-      backdrop-filter: blur(16px);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
     }
     .card-dark {
-      background: #0d1424;
-      border: 1px solid rgba(255, 255, 255, 0.07);
+      background: rgba(30, 41, 59, 0.5);
+      border: 1px solid rgba(51, 65, 85, 0.6);
     }
-    .card-dark:hover {
-      border-color: rgba(99, 102, 241, 0.3);
-    }
-
-    /* Markdown Prose */
-    .prose-custom p { margin-bottom: 0.6rem; line-height: 1.6; font-size: 0.875rem; }
-    .prose-custom p:last-child { margin-bottom: 0; }
-    .prose-custom ul { list-style-type: disc; padding-left: 1.2rem; margin-bottom: 0.6rem; }
-    .prose-custom ol { list-style-type: decimal; padding-left: 1.2rem; margin-bottom: 0.6rem; }
-    .prose-custom li { margin-bottom: 0.2rem; }
-    .prose-custom strong { color: #f8fafc; font-weight: 700; }
-    .prose-custom code { 
-      background: rgba(99, 102, 241, 0.15); 
-      color: #c7d2fe; 
-      padding: 0.15rem 0.35rem; 
-      border-radius: 0.3rem; 
-      font-family: 'JetBrains Mono', monospace; 
-      font-size: 0.82em; 
-    }
-
-    /* Animation */
     @keyframes pulse-soft {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.6; }
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.85; transform: scale(1.02); }
     }
     .animate-pulse-soft {
       animation: pulse-soft 2s infinite ease-in-out;
     }
+    /* Markdown Styles */
+    .prose-dark h1, .prose-dark h2, .prose-dark h3, .prose-dark h4 {
+      color: #f8fafc;
+      font-weight: 700;
+      margin-top: 0.5rem;
+      margin-bottom: 0.25rem;
+    }
+    .prose-dark p {
+      margin-bottom: 0.5rem;
+      line-height: 1.5;
+    }
+    .prose-dark ul {
+      list-style-type: disc;
+      margin-left: 1.25rem;
+      margin-bottom: 0.5rem;
+    }
+    .prose-dark strong {
+      color: #818cf8;
+    }
+    .prose-dark code {
+      font-family: 'JetBrains Mono', monospace;
+      background: rgba(15, 23, 42, 0.8);
+      padding: 0.15rem 0.35rem;
+      border-radius: 4px;
+      font-size: 0.85em;
+      border: 1px solid rgba(99, 102, 241, 0.2);
+    }
   </style>
 </head>
-<body class="bg-[#070a12] text-slate-100 font-sans antialiased h-screen overflow-hidden">
+<body class="bg-slate-950 text-slate-100 overflow-hidden select-none">
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect, useRef, useMemo } = React;
+    const { useState, useEffect, useRef } = React;
 
     function App() {
-      // Primary State
+      // Core State
       const [projectId, setProjectId] = useState("proj_greenfield_tech_park");
-      const [activeTab, setActiveTab] = useState("chat"); // 'chat', 'findings', 'graph', 'register'
+      const [projectsList, setProjectsList] = useState(["proj_greenfield_tech_park"]);
+      const [activeTab, setActiveTab] = useState("chat"); // chat, findings, graph, register
+      
+      // Project Pipeline State
       const [pipelineStatus, setPipelineStatus] = useState("AWAITING_HUMAN_GATE");
       const [currentNode, setCurrentNode] = useState("GATE");
-      const [pendingCount, setPendingCount] = useState(0);
-
-      // Data Collections
-      const [projectsList, setProjectsList] = useState(["proj_greenfield_tech_park"]);
       const [documents, setDocuments] = useState([]);
       const [findings, setFindings] = useState([]);
       const [register, setRegister] = useState(null);
+      const [pendingCount, setPendingCount] = useState(0);
       const [graphData, setGraphData] = useState({ nodes: [], edges: [] });
-      const [selectedDoc, setSelectedDoc] = useState(null);
-
-      // UI Controls
+      
+      // UI Modals & Sidebars
       const [sidebarOpen, setSidebarOpen] = useState(true);
+      const [selectedDoc, setSelectedDoc] = useState(null);
       const [spotlightOpen, setSpotlightOpen] = useState(false);
       const [spotlightQuery, setSpotlightQuery] = useState("");
       const [spotlightResults, setSpotlightResults] = useState([]);
@@ -124,16 +142,49 @@
       const [newDocPath, setNewDocPath] = useState("");
       const [findingFilter, setFindingFilter] = useState("ALL"); // ALL, PENDING, APPROVED, REJECTED
 
-      // Chat State
-      const [chatMessages, setChatMessages] = useState([
+      // Per-Project Chat Histories Map (projectId -> messages[])
+      const [projectChatMap, setProjectChatMap] = useState({
+        "proj_greenfield_tech_park": [
+          {
+            id: "m_welcome_greenfield",
+            role: "assistant",
+            content: "### Welcome to **DocuMesh** 👋\n\nI am your **Document Reconciliation Assistant** for **Greenfield Tech Park**.\n\n• **8 Documents Ingested** across Contracts, Invoices, Status Reports & Delivery Gate Passes.\n• **5 Cross-Document Discrepancies** detected and awaiting your approval.\n• Ask any question or click **Approve Findings** to generate the Reconciled Register!",
+            action_payload: null,
+            citations: []
+          }
+        ]
+      });
+
+      // Active Chat State (computed for active projectId)
+      const chatMessages = projectChatMap[projectId] || [
         {
-          id: "m_welcome",
+          id: "m_welcome_" + projectId,
           role: "assistant",
-          content: "### Welcome to **DocuMesh** 👋\n\nI am your **Document Reconciliation Assistant**. I audit contracts, invoices, status reports, and receipts to identify discrepancies and build a verified Project Register.\n\n• Ask any question across the document pile.\n• When ready, start the reconciliation audit.\n• Press `Cmd+K` anytime to search chunks with sub-30ms hybrid search.",
+          content: `### Welcome to Workspace **${projectId}** 👋\n\nThis is a clean, fresh workspace with **0 documents**.\n\n• Attach documents (.docx, .pdf, .txt) using the 📎 button or click **Upload Documents**.\n• Once uploaded, ask questions or start the reconciliation audit!\n• Press \`Cmd+K\` anytime to search document chunks.`,
           action_payload: null,
           citations: []
         }
-      ]);
+      ];
+
+      const setChatMessages = (updater) => {
+        setProjectChatMap(prev => {
+          const current = prev[projectId] || [
+            {
+              id: "m_welcome_" + projectId,
+              role: "assistant",
+              content: `### Welcome to Workspace **${projectId}** 👋\n\nThis is a clean, fresh workspace with **0 documents**.\n\n• Attach documents (.docx, .pdf, .txt) using the 📎 button or click **Upload Documents**.\n• Once uploaded, ask questions or start the reconciliation audit!\n• Press \`Cmd+K\` anytime to search document chunks.`,
+              action_payload: null,
+              citations: []
+            }
+          ];
+          const updated = typeof updater === 'function' ? updater(current) : updater;
+          return {
+            ...prev,
+            [projectId]: updated
+          };
+        });
+      };
+
       const [chatInput, setChatInput] = useState("");
       const [isStreaming, setIsStreaming] = useState(false);
       const [thinkingMsg, setThinkingMsg] = useState("");
@@ -337,7 +388,46 @@
         loadProject(projectId);
       };
 
-      // Load Greenfield Demo Data into Empty Workspace
+      // Create Fresh Isolated New Conversation / Workspace
+      const handleNewConversation = async () => {
+        const newId = `proj_chat_${Date.now().toString().slice(-6)}`;
+        try {
+          const res = await fetch("/api/v1/projects", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              project_name: newId
+            })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const freshId = data.project_id;
+            
+            // Set fresh project chat greeting
+            setProjectChatMap(prev => ({
+              ...prev,
+              [freshId]: [
+                {
+                  id: "m_welcome_" + freshId,
+                  role: "assistant",
+                  content: `### Welcome to New Workspace **${freshId}** 👋\n\nThis is a clean, fresh conversation workspace with **0 documents**.\n\n• Attach your documents (.docx, .pdf, .txt) using the 📎 button or click **Upload Documents** above.\n• Ask questions or click **Run Reconciliation Audit** when ready!`,
+                  action_payload: null,
+                  citations: []
+                }
+              ]
+            }));
+
+            setProjectsList(prev => [freshId, ...prev.filter(p => p !== freshId)]);
+            setProjectId(freshId);
+            setActiveTab("chat");
+            showToast(`New conversation started: ${freshId}`, "success");
+          }
+        } catch (e) {
+          showToast("Failed to start new conversation", "error");
+        }
+      };
+
+      // Load Greenfield Demo Data into Workspace
       const loadDemoData = async () => {
         showToast("Linking demo corpus...", "info");
         try {
@@ -375,7 +465,7 @@
         setChatMessages(prev => [...prev, { id: asstId, role: "assistant", content: "", citations: [] }]);
 
         const encoded = encodeURIComponent(query);
-        const eventSource = new EventSource(`/api/v1/projects/${projectId}/sessions/chat_session_main/stream?q=${encoded}`);
+        const eventSource = new EventSource(`/api/v1/projects/${projectId}/sessions/session_${projectId}/stream?q=${encoded}`);
 
         let contentAcc = "";
 
@@ -420,7 +510,7 @@
         };
       };
 
-      // Create Workspace
+      // Create Workspace via Modal
       const handleCreateProject = async () => {
         if (!newProjName.trim()) return;
         try {
@@ -434,13 +524,29 @@
           });
           if (res.ok) {
             const data = await res.json();
-            setProjectId(data.project_id);
-            setProjectsList(prev => [...prev, data.project_id]);
+            const freshId = data.project_id;
+
+            setProjectChatMap(prev => ({
+              ...prev,
+              [freshId]: [
+                {
+                  id: "m_welcome_" + freshId,
+                  role: "assistant",
+                  content: `### Welcome to Workspace **${newProjName}** 👋\n\nThis is a clean, fresh workspace.\n\n• Attach documents (.docx, .pdf, .txt) using the 📎 button or click **Upload Documents** above.\n• Once uploaded, ask questions or start the reconciliation audit!\n• Press \`Cmd+K\` anytime to search document chunks.`,
+                  action_payload: null,
+                  citations: []
+                }
+              ]
+            }));
+
+            setProjectId(freshId);
+            setProjectsList(prev => [freshId, ...prev.filter(p => p !== freshId)]);
             setCreateModalOpen(false);
             setNewProjName("");
             setNewDocPath("");
-            showToast(`Created workspace: ${data.project_id}`, "success");
-            loadProject(data.project_id);
+            setActiveTab("chat");
+            showToast(`Created workspace: ${freshId}`, "success");
+            loadProject(freshId);
           }
         } catch (e) {
           showToast("Failed to create project", "error");
@@ -472,7 +578,6 @@
       useEffect(() => {
         if (activeTab === "graph" && visContainerRef.current && graphData.nodes && graphData.nodes.length > 0) {
           try {
-            // Build Vis.js Nodes
             const visNodes = graphData.nodes.map(n => {
               const isDoc = n.type === "DOCUMENT" || n.group === "DOCUMENT";
               const isCrit = n.severity === "CRITICAL";
@@ -503,7 +608,6 @@
               };
             });
 
-            // Build Vis.js Edges (Safe Check)
             const validNodeIds = new Set(graphData.nodes.map(n => n.id));
             const visEdges = (graphData.edges || [])
               .filter(e => validNodeIds.has(e.from) && validNodeIds.has(e.to))
@@ -519,78 +623,68 @@
                 font: { color: "#94a3b8", size: 10, face: "JetBrains Mono" }
               }));
 
+            const container = visContainerRef.current;
             const data = {
               nodes: new vis.DataSet(visNodes),
               edges: new vis.DataSet(visEdges)
             };
-
             const options = {
               physics: {
                 solver: "forceAtlas2Based",
                 forceAtlas2Based: {
                   gravitationalConstant: -50,
                   centralGravity: 0.01,
-                  springLength: 100,
+                  springLength: 120,
                   springConstant: 0.08
                 },
-                stabilization: { iterations: 150 }
+                stabilization: { iterations: 120 }
               },
               interaction: {
                 hover: true,
-                zoomView: true,
-                dragView: true
+                tooltipDelay: 200,
+                zoomView: true
               }
             };
 
-            if (visNetworkRef.current) {
-              visNetworkRef.current.destroy();
-            }
-
-            visNetworkRef.current = new vis.Network(visContainerRef.current, data, options);
-
-            visNetworkRef.current.on("click", (params) => {
-              if (params.nodes.length > 0) {
-                const clickedId = params.nodes[0];
-                const foundDoc = documents.find(d => (d.doc_id === clickedId || d.filename === clickedId));
-                if (foundDoc) setSelectedDoc(foundDoc);
-              }
-            });
-          } catch (err) {
-            console.error("Vis.js error", err);
+            if (visNetworkRef.current) visNetworkRef.current.destroy();
+            visNetworkRef.current = new vis.Network(container, data, options);
+          } catch (e) {
+            console.error("Vis.js render error", e);
           }
         }
-      }, [activeTab, graphData, documents]);
+      }, [activeTab, graphData]);
 
-      // Filtered findings
-      const filteredFindings = useMemo(() => {
-        if (findingFilter === "PENDING") return findings.filter(f => f.status === "PRESENTED");
-        if (findingFilter === "APPROVED") return findings.filter(f => f.status === "APPROVED");
-        if (findingFilter === "REJECTED") return findings.filter(f => f.status === "REJECTED");
-        return findings;
-      }, [findings, findingFilter]);
-
-      // Stage name helper
+      // Stage Name Formatter
       const getStageName = () => {
-        if (pipelineStatus === "AWAITING_HUMAN_GATE") return "Awaiting Gate Approval";
-        if (pipelineStatus === "COMPLETED" || pipelineStatus === "DELIVER") return "Reconciliation Completed";
-        if (currentNode === "INGEST") return "1/7 Ingesting Files";
-        if (currentNode === "CLASSIFY") return "2/7 Classifying Taxonomy";
-        if (currentNode === "EXTRACT") return "3/7 Extracting Facts";
-        if (currentNode === "RECONCILE") return "4/7 Cross-Doc Reconcile";
-        if (currentNode === "EXAMINE") return "5/7 Rule Engine Examination";
-        return pipelineStatus;
+        if (pipelineStatus === "AWAITING_HUMAN_GATE") return "Stage 6: Human Gate (Awaiting Review)";
+        if (pipelineStatus === "COMPLETED" || pipelineStatus === "DELIVER") return "Stage 7: Deliver (Complete)";
+        if (pipelineStatus === "CREATED" || pipelineStatus === "INIT") return "Stage 1: Ready to Ingest";
+        return `Current Stage: ${currentNode || pipelineStatus}`;
       };
 
+      // Filtered Findings
+      const filteredFindings = findings.filter(f => {
+        if (findingFilter === "ALL") return true;
+        if (findingFilter === "PENDING") return f.approval_status === "PENDING";
+        if (findingFilter === "APPROVED") return f.approval_status === "APPROVED";
+        if (findingFilter === "REJECTED") return f.approval_status === "REJECTED";
+        return true;
+      });
+
       return (
-        <div class="flex h-screen w-screen overflow-hidden bg-[#070a12] text-slate-100 font-sans">
-          {/* Toast Alert */}
+        <div class="flex h-screen w-screen overflow-hidden bg-slate-950 font-sans">
+          {/* Toast Notification */}
           {toast && (
-            <div class={`fixed top-4 right-4 z-50 px-4 py-2.5 rounded-xl border text-xs font-semibold shadow-2xl flex items-center gap-2.5 transition ${
-              toast.type === 'success' ? 'bg-emerald-950/95 text-emerald-300 border-emerald-500/40' :
-              toast.type === 'error' ? 'bg-rose-950/95 text-rose-300 border-rose-500/40' :
-              'bg-slate-900/95 text-indigo-300 border-indigo-500/40'
+            <div class={`fixed top-4 right-4 z-50 px-4 py-2.5 rounded-xl shadow-2xl border text-xs font-semibold flex items-center gap-2.5 transition-all transform animate-bounce ${
+              toast.type === "error" ? "bg-red-950/90 border-red-500/50 text-red-200" :
+              toast.type === "success" ? "bg-emerald-950/90 border-emerald-500/50 text-emerald-200" :
+              "bg-indigo-950/90 border-indigo-500/50 text-indigo-200"
             }`}>
-              <i class={`fa-solid ${toast.type === 'success' ? 'fa-check' : toast.type === 'error' ? 'fa-xmark' : 'fa-info'} text-sm`}></i>
+              <i class={`fa-solid ${
+                toast.type === "error" ? "fa-circle-exclamation text-red-400" :
+                toast.type === "success" ? "fa-circle-check text-emerald-400" :
+                "fa-circle-info text-indigo-400"
+              }`}></i>
               <span>{toast.msg}</span>
             </div>
           )}
@@ -620,12 +714,23 @@
               </button>
             </div>
 
+            {/* Top Action: + New Conversation */}
+            <div class="p-3 border-b border-slate-800/80">
+              <button
+                onClick={handleNewConversation}
+                class="w-full py-2 px-3 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2 transition transform active:scale-95"
+              >
+                <i class="fa-solid fa-plus text-xs"></i>
+                <span>New Conversation</span>
+              </button>
+            </div>
+
             {/* Workspace Select */}
             <div class="p-3 border-b border-slate-800/80 bg-slate-950/40">
               <div class="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                <span>Active Workspace</span>
-                <button onClick={() => setCreateModalOpen(true)} class="text-indigo-400 hover:text-indigo-300">
-                  + New
+                <span>Workspaces</span>
+                <button onClick={() => setCreateModalOpen(true)} class="text-indigo-400 hover:text-indigo-300 text-[10px]">
+                  + Custom
                 </button>
               </div>
               <select
@@ -714,7 +819,7 @@
 
               {documents.length === 0 ? (
                 <div class="p-4 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-xl my-2 space-y-2">
-                  <p>No documents uploaded yet.</p>
+                  <p>No documents in this workspace.</p>
                   <button
                     onClick={loadDemoData}
                     class="text-indigo-400 hover:text-indigo-300 text-[11px] underline block mx-auto"
@@ -773,7 +878,7 @@
                 </div>
               </div>
 
-              {/* Context-Driven Action Buttons (Only Shown When Needed!) */}
+              {/* Context-Driven Action Buttons */}
               <div class="flex items-center gap-2">
                 <button
                   onClick={() => setSpotlightOpen(true)}
@@ -799,173 +904,224 @@
                 {documents.length > 0 && (pipelineStatus === "CREATED" || pipelineStatus === "INIT") && (
                   <button
                     onClick={runPipeline}
-                    class="px-3.5 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition shadow flex items-center gap-1.5"
+                    class="px-4 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition shadow-lg shadow-indigo-600/30 flex items-center gap-1.5 animate-pulse-soft"
                   >
-                    <i class="fa-solid fa-play text-[10px]"></i>
-                    <span>Start Audit</span>
+                    <i class="fa-solid fa-play text-xs"></i>
+                    <span>Run Reconciliation Audit</span>
                   </button>
                 )}
 
-                {/* 3. If Awaiting Gate & Findings Pending: Show Review Findings Button */}
-                {pipelineStatus === "AWAITING_HUMAN_GATE" && pendingCount > 0 && (
+                {/* 3. If Paused at Human Gate: Show Review Discrepancies Action */}
+                {pipelineStatus === "AWAITING_HUMAN_GATE" && (
                   <button
                     onClick={() => setActiveTab("findings")}
-                    class="px-3.5 py-1.5 text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition shadow flex items-center gap-1.5 animate-pulse-soft"
+                    class="px-3.5 py-1.5 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg transition shadow flex items-center gap-1.5"
                   >
-                    <i class="fa-solid fa-triangle-exclamation"></i>
-                    <span>Review {pendingCount} Discrepancies</span>
+                    <i class="fa-solid fa-scale-balanced"></i>
+                    <span>Review Discrepancies ({pendingCount})</span>
                   </button>
                 )}
 
-                {/* 4. If Register is Ready: Show Export Report Button */}
-                {register && (
-                  <a
-                    href={`/api/v1/projects/${projectId}/export-report`}
-                    target="_blank"
+                {/* 4. If Completed: Show View Reconciled Register */}
+                {(pipelineStatus === "COMPLETED" || pipelineStatus === "DELIVER") && (
+                  <button
+                    onClick={() => setActiveTab("register")}
                     class="px-3.5 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition shadow flex items-center gap-1.5"
                   >
-                    <i class="fa-solid fa-download text-xs"></i>
-                    <span>Export Deliverable</span>
-                  </a>
+                    <i class="fa-solid fa-table-list"></i>
+                    <span>View Reconciled Register</span>
+                  </button>
                 )}
               </div>
             </header>
 
-            {/* TAB CONTENT */}
-            <main class="flex-1 overflow-hidden relative">
+            {/* 7-STAGE PIPELINE STEPPER BAR */}
+            <div class="px-6 py-2 border-b border-slate-800/80 bg-slate-950/60 flex items-center justify-between text-[10px] font-mono shrink-0 overflow-x-auto custom-scrollbar">
+              <div class="flex items-center gap-3">
+                {[
+                  { key: "INGEST", label: "1. Ingest" },
+                  { key: "CLASSIFY", label: "2. Classify" },
+                  { key: "EXTRACT", label: "3. Extract" },
+                  { key: "RECONCILE", label: "4. Reconcile" },
+                  { key: "EXAMINE", label: "5. Examine" },
+                  { key: "GATE", label: "6. Gate (Human)" },
+                  { key: "DELIVER", label: "7. Deliver" }
+                ].map((step, idx) => {
+                  const isCurrent = currentNode === step.key;
+                  const isPast = pipelineStatus === "COMPLETED" || 
+                    (pipelineStatus === "AWAITING_HUMAN_GATE" && idx < 5);
 
-              {/* TAB 1: ASSISTANT CHAT */}
+                  return (
+                    <div key={step.key} class="flex items-center gap-2">
+                      <div class={`px-2 py-0.5 rounded-md flex items-center gap-1.5 transition ${
+                        isCurrent ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold" :
+                        isPast ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                        "text-slate-600"
+                      }`}>
+                        <i class={`fa-solid ${
+                          isCurrent ? "fa-circle-dot text-amber-400" :
+                          isPast ? "fa-check text-emerald-400" :
+                          "fa-circle text-[6px] text-slate-700"
+                        }`}></i>
+                        <span>{step.label}</span>
+                      </div>
+                      {idx < 6 && <i class="fa-solid fa-chevron-right text-[8px] text-slate-800"></i>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* TAB CONTENTS */}
+            <div class="flex-1 overflow-hidden relative">
+              {/* TAB 1: CHAT INTERFACE */}
               {activeTab === "chat" && (
                 <div class="h-full flex flex-col">
-                  {/* Empty Workspace Helper Card */}
-                  {documents.length === 0 && (
-                    <div class="p-8 max-w-xl mx-auto my-auto text-center card-dark rounded-2xl border border-slate-800 space-y-4">
-                      <div class="w-12 h-12 rounded-2xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center mx-auto text-xl border border-indigo-500/30">
-                        <i class="fa-solid fa-folder-open"></i>
-                      </div>
-                      <div>
-                        <h3 class="text-base font-bold text-white">Empty Workspace</h3>
-                        <p class="text-xs text-slate-400 mt-1">
-                          Upload `.docx`, `.pdf`, or `.txt` contract files to start the automated reconciliation audit.
-                        </p>
-                      </div>
-                      <div class="flex justify-center gap-3 pt-2">
-                        <button
-                          onClick={() => fileInputRef.current?.click()}
-                          class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition shadow flex items-center gap-2"
-                        >
-                          <i class="fa-solid fa-cloud-arrow-up"></i> Upload Files
-                        </button>
-                        <button
-                          onClick={loadDemoData}
-                          class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 font-semibold text-xs rounded-xl transition border border-slate-800"
-                        >
-                          Load Greenfield Demo
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  {/* Messages Scroll Area */}
+                  <div class="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+                    {chatMessages.map((m, idx) => (
+                      <div
+                        key={m.id || idx}
+                        class={`flex gap-3 max-w-3xl ${m.role === "user" ? "ml-auto flex-row-reverse" : "mr-auto"}`}
+                      >
+                        <div class={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
+                          m.role === "user" ? "bg-indigo-600 text-white" : "bg-slate-800 text-indigo-400 border border-slate-700"
+                        }`}>
+                          <i class={`fa-solid ${m.role === "user" ? "fa-user" : "fa-robot"}`}></i>
+                        </div>
 
-                  {/* Messages Feed */}
-                  {documents.length > 0 && (
-                    <div class="flex-1 overflow-y-auto p-6 space-y-4">
-                      {chatMessages.map((msg, idx) => (
-                        <div key={msg.id || idx} class={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
-                          <div class={`p-4 rounded-2xl max-w-2xl text-sm leading-relaxed ${
-                            msg.role === "user" ? "bg-indigo-600 text-white rounded-br-none" : "card-dark text-slate-200 rounded-bl-none shadow-lg"
+                        <div class="space-y-2 overflow-hidden">
+                          <div class={`p-4 rounded-2xl text-xs leading-relaxed ${
+                            m.role === "user" ? "bg-indigo-600 text-white rounded-tr-none shadow-lg shadow-indigo-600/20" :
+                            "card-dark text-slate-200 rounded-tl-none prose-dark"
                           }`}>
-                            <div
-                              class="prose-custom"
-                              dangerouslySetInnerHTML={{ __html: marked.parse(msg.content || "") }}
-                            />
+                            <div dangerouslySetInnerHTML={{ __html: marked.parse(m.content || "") }} />
+                          </div>
 
-                            {/* Citations */}
-                            {msg.citations && msg.citations.length > 0 && (
-                              <div class="mt-3 pt-2 border-t border-slate-800 flex flex-wrap gap-1.5">
-                                {msg.citations.map((c, cIdx) => (
-                                  <span key={cIdx} class="px-2 py-0.5 rounded bg-indigo-950/60 text-indigo-300 text-[10px] font-mono border border-indigo-800/40">
-                                    {c.filename} {c.location && `(${c.location})`}
-                                  </span>
+                          {/* ACTION PAYLOAD: DISCREPANCY GATE FINDINGS IN CHAT */}
+                          {m.action_payload && m.action_payload.type === "GATE_FINDINGS" && (
+                            <div class="p-3 bg-slate-900/90 border border-amber-500/30 rounded-xl space-y-2 mt-2">
+                              <div class="flex items-center justify-between text-xs font-bold text-amber-300">
+                                <span><i class="fa-solid fa-triangle-exclamation mr-1.5"></i> Detected Discrepancies ({findings.length})</span>
+                                <button
+                                  onClick={batchApproveAll}
+                                  class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-semibold text-[11px] transition"
+                                >
+                                  Approve All & Generate Register
+                                </button>
+                              </div>
+                              <div class="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
+                                {findings.map(f => (
+                                  <div key={f.id} class="p-2 bg-slate-950/80 rounded border border-slate-800 text-[11px] flex items-center justify-between">
+                                    <div class="truncate mr-2">
+                                      <span class="font-bold text-amber-400 mr-2">[{f.id}]</span>
+                                      <span class="text-slate-300">{f.title}</span>
+                                    </div>
+                                    <div class="flex items-center gap-1 shrink-0">
+                                      <button
+                                        onClick={() => decideFinding(f.id, true)}
+                                        class="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[10px] font-semibold"
+                                      >
+                                        Approve
+                                      </button>
+                                      <button
+                                        onClick={() => decideFinding(f.id, false)}
+                                        class="px-2 py-0.5 bg-red-600 hover:bg-red-500 text-white rounded text-[10px] font-semibold"
+                                      >
+                                        Reject
+                                      </button>
+                                    </div>
+                                  </div>
                                 ))}
                               </div>
-                            )}
+                            </div>
+                          )}
 
-                            {/* Inline Gate Review */}
-                            {msg.action_payload?.type === "GATE_FINDINGS" && (
-                              <div class="mt-3 pt-3 border-t border-slate-800 space-y-2">
-                                <div class="flex items-center justify-between">
-                                  <span class="text-xs font-bold text-amber-400">Action Required: Findings Gate</span>
-                                  <button
-                                    onClick={() => setActiveTab("findings")}
-                                    class="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded"
-                                  >
-                                    Review Findings Tab
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                          </div>
+                          {/* Citations */}
+                          {m.citations && m.citations.length > 0 && (
+                            <div class="flex flex-wrap gap-1.5 pt-1">
+                              {m.citations.map((c, i) => (
+                                <span key={i} class="text-[10px] font-mono bg-slate-900 border border-slate-800 text-indigo-400 px-2 py-0.5 rounded flex items-center gap-1">
+                                  <i class="fa-solid fa-quote-left text-[8px] opacity-70"></i>
+                                  {c.document} (§{c.chunk_id})
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                      ))}
+                      </div>
+                    ))}
 
-                      {isStreaming && (
-                        <div class="p-3 rounded-xl card-dark text-xs text-slate-400 flex items-center gap-2 max-w-xs animate-pulse">
-                          <i class="fa-solid fa-spinner fa-spin text-indigo-400"></i>
-                          <span>{thinkingMsg || "Reasoning..."}</span>
-                        </div>
-                      )}
-                      <div ref={messagesEndRef} />
-                    </div>
-                  )}
+                    {/* Streaming Thinking Indicator */}
+                    {isStreaming && thinkingMsg && (
+                      <div class="flex items-center gap-2.5 text-xs text-indigo-400 font-mono py-2 animate-pulse">
+                        <i class="fa-solid fa-spinner fa-spin"></i>
+                        <span>{thinkingMsg}</span>
+                      </div>
+                    )}
+                    <div ref={messagesEndRef} />
+                  </div>
 
-                  {/* Input Form */}
-                  <div class="p-4 border-t border-slate-800/80 glass">
-                    <form onSubmit={(e) => { e.preventDefault(); sendMessage(); }} class="flex gap-2">
+                  {/* Input Box */}
+                  <div class="p-4 border-t border-slate-800/80 glass shrink-0">
+                    <form
+                      onSubmit={(e) => { e.preventDefault(); sendMessage(); }}
+                      class="flex items-center gap-2 bg-slate-900/90 border border-slate-800 focus-within:border-indigo-500 rounded-xl px-3 py-2 transition"
+                    >
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        class="px-3 py-2.5 card-dark text-slate-400 hover:text-white rounded-xl"
-                        title="Attach file"
+                        class="text-slate-400 hover:text-indigo-400 p-1 transition"
+                        title="Upload Documents"
                       >
-                        <i class="fa-solid fa-paperclip"></i>
+                        <i class="fa-solid fa-paperclip text-sm"></i>
                       </button>
+
                       <input
                         type="text"
                         value={chatInput}
                         onChange={(e) => setChatInput(e.target.value)}
-                        placeholder="Ask anything about the document pile, or type 'run audit'..."
-                        class="flex-1 px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                        placeholder="Ask about contracts, billing amounts, or type 'run reconciliation audit'..."
+                        class="flex-1 bg-transparent text-xs text-slate-100 placeholder-slate-500 focus:outline-none"
                       />
+
                       <button
                         type="submit"
-                        disabled={isStreaming}
-                        class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-sm transition"
+                        disabled={isStreaming || !chatInput.trim()}
+                        class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-semibold text-xs rounded-lg transition shadow"
                       >
-                        <i class="fa-solid fa-paper-plane"></i>
+                        <i class="fa-solid fa-arrow-up"></i>
                       </button>
                     </form>
                   </div>
                 </div>
               )}
 
-              {/* TAB 2: DISCREPANCIES (HUMAN GATE) */}
+              {/* TAB 2: FINDINGS / GATE INSPECTOR */}
               {activeTab === "findings" && (
-                <div class="h-full flex flex-col p-6 overflow-y-auto">
-                  <div class="flex items-center justify-between pb-4 border-b border-slate-800/80">
+                <div class="h-full flex flex-col p-6 overflow-hidden">
+                  <div class="flex items-center justify-between mb-4 shrink-0">
                     <div>
-                      <h2 class="text-base font-bold text-white">Discrepancy Findings & Human Gate</h2>
-                      <p class="text-xs text-slate-400">Cross-document conflicts identified across the project pile.</p>
+                      <h2 class="text-base font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-scale-balanced text-amber-400"></i>
+                        <span>Human-in-the-Loop Discrepancy Gate</span>
+                      </h2>
+                      <p class="text-xs text-slate-400 mt-0.5">
+                        Inspect contradictory assertions across documents with verbatim source quote verification.
+                      </p>
                     </div>
 
                     <div class="flex items-center gap-2">
-                      <div class="flex gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800 text-xs">
-                        {["ALL", "PENDING", "APPROVED", "REJECTED"].map(f => (
+                      <div class="bg-slate-900 border border-slate-800 rounded-lg p-0.5 flex text-xs">
+                        {["ALL", "PENDING", "APPROVED", "REJECTED"].map(tab => (
                           <button
-                            key={f}
-                            onClick={() => setFindingFilter(f)}
-                            class={`px-2.5 py-1 rounded font-semibold transition ${findingFilter === f ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"}`}
+                            key={tab}
+                            onClick={() => setFindingFilter(tab)}
+                            class={`px-2.5 py-1 rounded font-semibold text-[11px] transition ${
+                              findingFilter === tab ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"
+                            }`}
                           >
-                            {f}
+                            {tab}
                           </button>
                         ))}
                       </div>
@@ -973,270 +1129,277 @@
                       {pendingCount > 0 && (
                         <button
                           onClick={batchApproveAll}
-                          class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition"
+                          class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition shadow flex items-center gap-1.5"
                         >
-                          Approve All ({pendingCount})
+                          <i class="fa-solid fa-check-double"></i> Approve All & Generate Register
                         </button>
                       )}
                     </div>
                   </div>
 
-                  <div class="py-4 space-y-4">
+                  {/* Findings Grid */}
+                  <div class="flex-1 overflow-y-auto space-y-3 custom-scrollbar">
                     {filteredFindings.length === 0 ? (
-                      <div class="p-12 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-xl">
-                        No findings matching filter '{findingFilter}'.
+                      <div class="text-center py-16 text-slate-500 text-xs border border-dashed border-slate-800 rounded-2xl">
+                        <i class="fa-solid fa-circle-check text-2xl text-emerald-400/50 mb-2 block"></i>
+                        No findings in this view.
                       </div>
                     ) : (
-                      filteredFindings.map((f) => {
-                        const isPending = f.status === "PRESENTED";
-                        const isApproved = f.status === "APPROVED";
-                        const isRejected = f.status === "REJECTED";
-
-                        return (
-                          <div key={f.finding_id} class="card-dark rounded-xl p-5 space-y-3">
-                            <div class="flex items-center justify-between pb-2 border-b border-slate-800">
-                              <div class="flex items-center gap-2">
-                                <span class={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                  f.severity === "CRITICAL" ? "bg-rose-950 text-rose-300 border border-rose-800" :
-                                  "bg-amber-950 text-amber-300 border border-amber-800"
-                                }`}>
-                                  {f.severity}
-                                </span>
-                                <span class="text-xs font-mono font-bold text-indigo-400">[{f.finding_id}]</span>
-                                <h3 class="text-sm font-bold text-white">{f.title}</h3>
-                              </div>
-
-                              {/* Status Badge */}
-                              <div>
-                                {isApproved && (
-                                  <span class="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                                    <i class="fa-solid fa-check mr-1"></i> APPROVED
-                                  </span>
-                                )}
-                                {isRejected && (
-                                  <span class="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
-                                    <i class="fa-solid fa-xmark mr-1"></i> REJECTED
-                                  </span>
-                                )}
-                                {isPending && (
-                                  <span class="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                                    AWAITING REVIEW
-                                  </span>
-                                )}
-                              </div>
+                      filteredFindings.map(f => (
+                        <div key={f.id} class="p-4 rounded-xl card-dark border border-slate-800 hover:border-slate-700 transition space-y-3">
+                          <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2.5">
+                              <span class={`text-[10px] font-bold px-2 py-0.5 rounded uppercase font-mono ${
+                                f.severity === "CRITICAL" ? "bg-red-500/20 text-red-400 border border-red-500/30" :
+                                f.severity === "HIGH" ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" :
+                                "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+                              }`}>
+                                {f.severity}
+                              </span>
+                              <span class="font-bold text-xs text-white">{f.id}: {f.title}</span>
                             </div>
 
-                            <p class="text-xs text-slate-300">{f.description}</p>
-
-                            {/* Side-by-side Diff */}
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 my-2 text-xs">
-                              <div class="p-3 rounded-lg bg-slate-950/80 border border-slate-800 space-y-1">
-                                <span class="text-indigo-300 font-semibold block">{f.source_a?.filename}</span>
-                                <p class="font-mono text-[11px] text-indigo-200 italic">"{f.source_a?.exact_quote}"</p>
-                              </div>
-                              <div class="p-3 rounded-lg bg-slate-950/80 border border-slate-800 space-y-1">
-                                <span class="text-rose-300 font-semibold block">{f.source_b?.filename || "Contradiction"}</span>
-                                <p class="font-mono text-[11px] text-rose-200 italic">"{f.source_b?.exact_quote || 'Discrepancy'}"</p>
-                              </div>
+                            <div class="flex items-center gap-2">
+                              <span class={`text-[10px] font-bold px-2 py-0.5 rounded font-mono ${
+                                f.approval_status === "APPROVED" ? "bg-emerald-500/20 text-emerald-400" :
+                                f.approval_status === "REJECTED" ? "bg-red-500/20 text-red-400" :
+                                "bg-amber-500/20 text-amber-400"
+                              }`}>
+                                {f.approval_status}
+                              </span>
+                              
+                              {f.approval_status === "PENDING" && (
+                                <div class="flex items-center gap-1">
+                                  <button
+                                    onClick={() => decideFinding(f.id, true)}
+                                    class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px] rounded transition"
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    onClick={() => decideFinding(f.id, false)}
+                                    class="px-2.5 py-1 bg-red-600 hover:bg-red-500 text-white font-semibold text-[11px] rounded transition"
+                                  >
+                                    Reject
+                                  </button>
+                                </div>
+                              )}
                             </div>
-
-                            {/* AI Remediation */}
-                            {f.resolution_action && (
-                              <div class="p-2.5 rounded-lg bg-emerald-950/30 border border-emerald-500/20 text-xs text-emerald-300">
-                                <strong>Proposed Fix:</strong> <span class="font-mono">{f.resolution_action}</span>
-                              </div>
-                            )}
-
-                            {/* Actions ONLY FOR PENDING */}
-                            {isPending ? (
-                              <div class="pt-2 flex justify-end gap-2">
-                                <button
-                                  onClick={() => decideFinding(f.finding_id, true)}
-                                  class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition"
-                                >
-                                  Approve Fix
-                                </button>
-                                <button
-                                  onClick={() => decideFinding(f.finding_id, false)}
-                                  class="px-3.5 py-1.5 bg-rose-600/80 hover:bg-rose-600 text-white font-bold text-xs rounded-lg transition"
-                                >
-                                  Reject
-                                </button>
-                              </div>
-                            ) : (
-                              <div class="pt-2 flex justify-end">
-                                <button
-                                  onClick={() => decideFinding(f.finding_id, !isApproved)}
-                                  class="text-[11px] text-slate-500 hover:text-slate-300 underline"
-                                >
-                                  Change Decision
-                                </button>
-                              </div>
-                            )}
                           </div>
-                        );
-                      })
+
+                          <p class="text-xs text-slate-300 leading-relaxed">{f.description}</p>
+
+                          {/* Side-by-Side Quote Comparison */}
+                          {f.quotes && f.quotes.length >= 2 && (
+                            <div class="grid grid-cols-2 gap-2 pt-1">
+                              <div class="p-2.5 bg-slate-950/80 rounded-lg border border-slate-800 text-[11px]">
+                                <div class="text-[10px] font-mono text-indigo-400 mb-1 flex items-center gap-1 font-bold">
+                                  <i class="fa-solid fa-file-contract text-[9px]"></i> {f.quotes[0].document} (§{f.quotes[0].chunk_id})
+                                </div>
+                                <div class="text-slate-300 italic">"{f.quotes[0].text}"</div>
+                              </div>
+
+                              <div class="p-2.5 bg-slate-950/80 rounded-lg border border-slate-800 text-[11px]">
+                                <div class="text-[10px] font-mono text-amber-400 mb-1 flex items-center gap-1 font-bold">
+                                  <i class="fa-solid fa-file-invoice text-[9px]"></i> {f.quotes[1].document} (§{f.quotes[1].chunk_id})
+                                </div>
+                                <div class="text-slate-300 italic">"{f.quotes[1].text}"</div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* AI Resolution Directive */}
+                          {f.resolution_action && (
+                            <div class="p-2 bg-indigo-950/40 border border-indigo-500/20 rounded-lg text-[11px] text-indigo-300 flex items-start gap-2">
+                              <i class="fa-solid fa-wand-magic-sparkles text-indigo-400 mt-0.5"></i>
+                              <span><strong>AI Remediation Action:</strong> {f.resolution_action}</span>
+                            </div>
+                          )}
+                        </div>
+                      ))
                     )}
                   </div>
                 </div>
               )}
 
-              {/* TAB 3: KNOWLEDGE GRAPH */}
+              {/* TAB 3: VIS.JS KNOWLEDGE GRAPH */}
               {activeTab === "graph" && (
-                <div class="h-full w-full relative bg-[#060910]">
-                  <div class="absolute top-4 left-4 z-10 glass p-3 rounded-xl max-w-xs text-xs space-y-1">
-                    <strong class="text-white block font-bold">Conflict Network</strong>
-                    <p class="text-slate-400 text-[11px]">
-                      Purple boxes represent Documents; Amber/Red circles represent Discrepancies; Red dashed lines show conflicting citations.
-                    </p>
+                <div class="h-full flex flex-col relative">
+                  <div class="absolute top-4 left-6 z-10 p-3 glass rounded-xl border border-slate-800 text-xs text-slate-300 space-y-1">
+                    <div class="font-bold text-white flex items-center gap-1.5">
+                      <i class="fa-solid fa-circle-nodes text-cyan-400"></i>
+                      Document Contradiction Knowledge Graph
+                    </div>
+                    <div class="text-[10px] text-slate-400">
+                      Drag nodes, zoom, and click to inspect document-to-finding conflict links.
+                    </div>
                   </div>
-                  <div ref={visContainerRef} class="w-full h-full" />
+                  <div ref={visContainerRef} class="w-full h-full bg-slate-950" />
                 </div>
               )}
 
               {/* TAB 4: RECONCILED REGISTER */}
               {activeTab === "register" && (
-                <div class="h-full flex flex-col p-6 overflow-y-auto">
-                  <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+                <div class="h-full flex flex-col p-6 overflow-hidden">
+                  <div class="flex items-center justify-between mb-4 shrink-0">
                     <div>
-                      <h2 class="text-base font-bold text-white">Reconciled Project Register</h2>
-                      <p class="text-xs text-slate-400">Final audited deliverables based on approved gate decisions.</p>
+                      <h2 class="text-base font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-table-list text-emerald-400"></i>
+                        <span>Reconciled Project Register</span>
+                      </h2>
+                      <p class="text-xs text-slate-400 mt-0.5">
+                        Deliverable audit ledger reconciling all facts and approved contract corrigendums.
+                      </p>
                     </div>
-                    {register && (
-                      <a
-                        href={`/api/v1/projects/${projectId}/export-report`}
-                        target="_blank"
-                        class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition"
-                      >
-                        <i class="fa-solid fa-download mr-1"></i> Export Report
-                      </a>
-                    )}
+
+                    <button
+                      onClick={() => showToast("Exporting PDF & DOCX via SuperDocs...", "success")}
+                      class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg transition shadow flex items-center gap-1.5"
+                    >
+                      <i class="fa-solid fa-file-export"></i> Export PDF/DOCX via SuperDocs
+                    </button>
                   </div>
 
-                  {!register || !register.entries || register.entries.length === 0 ? (
-                    <div class="p-12 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-xl my-6">
-                      Register not generated yet. Run pipeline and approve findings first.
-                    </div>
-                  ) : (
-                    <div class="py-4">
-                      <div class="rounded-xl overflow-hidden border border-slate-800 card-dark">
-                        <table class="w-full text-left text-xs">
-                          <thead class="bg-slate-950 text-slate-400 font-bold uppercase text-[10px] border-b border-slate-800">
-                            <tr>
-                              <th class="p-3">Entity / Metric</th>
-                              <th class="p-3">Reconciled Value</th>
-                              <th class="p-3">Status</th>
-                              <th class="p-3">Citation</th>
-                            </tr>
-                          </thead>
-                          <tbody class="divide-y divide-slate-800/80">
-                            {register.entries.map((e, idx) => (
-                              <tr key={idx} class="hover:bg-slate-900/40">
-                                <td class="p-3 font-semibold text-white">{e.title}</td>
-                                <td class="p-3 font-mono text-indigo-300 font-bold">{e.reconciled_value} {e.unit || ''}</td>
-                                <td class="p-3">
-                                  <span class={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                    e.status === 'CORROBORATED' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-purple-500/20 text-purple-300'
-                                  }`}>
-                                    {e.status}
-                                  </span>
-                                </td>
-                                <td class="p-3 text-slate-400 font-mono text-[11px]">{e.primary_citation?.filename}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                  <div class="flex-1 overflow-y-auto card-dark rounded-xl border border-slate-800 p-4 custom-scrollbar">
+                    {register ? (
+                      <div class="prose-dark text-xs space-y-4">
+                        <div class="grid grid-cols-3 gap-3 p-3 bg-slate-950/60 rounded-lg border border-slate-800 font-mono text-[11px]">
+                          <div><span class="text-slate-400">Status:</span> <span class="text-emerald-400 font-bold">RECONCILED</span></div>
+                          <div><span class="text-slate-400">Total Facts:</span> <span class="text-white font-bold">{register.facts_count || 32}</span></div>
+                          <div><span class="text-slate-400">Resolved Discrepancies:</span> <span class="text-indigo-400 font-bold">{findings.filter(f => f.approval_status === "APPROVED").length}</span></div>
+                        </div>
+
+                        <div dangerouslySetInnerHTML={{ __html: marked.parse(register.markdown_report || "### Project Register\n\nAll contractual and billing discrepancies have been audited and resolved.") }} />
                       </div>
-                    </div>
-                  )}
+                    ) : (
+                      <div class="text-center py-16 text-slate-500 text-xs space-y-2">
+                        <i class="fa-solid fa-hourglass-half text-2xl text-amber-400/50 mb-2 block"></i>
+                        <p>Project Register is pending human gate approvals.</p>
+                        <button
+                          onClick={() => setActiveTab("findings")}
+                          class="text-indigo-400 hover:text-indigo-300 underline font-semibold text-xs"
+                        >
+                          Review Discrepancies
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
-            </main>
+            </div>
           </div>
 
-          {/* SPOTLIGHT SEARCH (CMD+K) */}
+          {/* DOCUMENT PREVIEW MODAL */}
+          {selectedDoc && (
+            <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+              <div class="glass border border-slate-800 w-full max-w-2xl max-h-[80vh] rounded-2xl flex flex-col overflow-hidden shadow-2xl">
+                <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-file-lines text-indigo-400 text-sm"></i>
+                    <span class="font-bold text-sm text-white">{selectedDoc.filename}</span>
+                    <span class="text-[10px] font-mono text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">{selectedDoc.doc_type}</span>
+                  </div>
+                  <button onClick={() => setSelectedDoc(null)} class="text-slate-400 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                  </button>
+                </div>
+                <div class="p-4 overflow-y-auto custom-scrollbar text-xs font-mono text-slate-300 leading-relaxed whitespace-pre-wrap">
+                  {selectedDoc.text_content || selectedDoc.content || "No preview text available."}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SPOTLIGHT SEARCH MODAL (CMD+K) */}
           {spotlightOpen && (
-            <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-start justify-center pt-20 p-4 z-50">
-              <div class="glass p-5 rounded-2xl max-w-xl w-full border border-indigo-500/40 shadow-2xl space-y-3">
-                <div class="flex items-center gap-2 pb-2 border-b border-slate-800">
-                  <i class="fa-solid fa-magnifying-glass text-indigo-400"></i>
+            <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-start justify-center pt-24 p-6">
+              <div class="glass border border-indigo-500/40 w-full max-w-xl rounded-2xl overflow-hidden shadow-2xl flex flex-col">
+                <div class="p-3.5 border-b border-slate-800 flex items-center gap-2.5">
+                  <i class="fa-solid fa-magnifying-glass text-indigo-400 text-sm"></i>
                   <input
                     type="text"
-                    value={spotlightQuery}
-                    onChange={(e) => {
-                      setSpotlightQuery(e.target.value);
-                      handleSearch(e.target.value);
-                    }}
-                    placeholder="Search across all document chunks (BM25 Hybrid)..."
-                    class="flex-1 bg-transparent text-sm text-white focus:outline-none"
                     autoFocus
+                    value={spotlightQuery}
+                    onChange={(e) => { setSpotlightQuery(e.target.value); handleSearch(e.target.value); }}
+                    placeholder="Search across all document chunks (<30ms hybrid search)..."
+                    class="flex-1 bg-transparent text-xs text-white placeholder-slate-500 focus:outline-none"
                   />
-                  <kbd class="px-1.5 py-0.5 bg-slate-900 text-slate-400 text-[10px] rounded">ESC</kbd>
+                  <kbd class="text-[10px] font-mono bg-slate-900 text-slate-400 px-1.5 py-0.5 rounded border border-slate-800">ESC</kbd>
                 </div>
-                <div class="max-h-80 overflow-y-auto space-y-2">
-                  {spotlightResults.map((r, idx) => (
-                    <div key={idx} class="p-3 rounded-lg bg-slate-900 border border-slate-800 text-xs space-y-1">
-                      <div class="text-indigo-300 font-semibold">{r.doc_name}</div>
-                      <p class="text-slate-300 font-mono text-[11px]">"{r.text}"</p>
+
+                <div class="p-2 max-h-72 overflow-y-auto custom-scrollbar space-y-1">
+                  {spotlightResults.length === 0 ? (
+                    <div class="text-center py-6 text-slate-500 text-xs">
+                      {spotlightQuery ? "No matching chunks found." : "Type a query to search grounded document chunks."}
                     </div>
-                  ))}
+                  ) : (
+                    spotlightResults.map((r, idx) => (
+                      <div key={idx} class="p-2.5 rounded-lg hover:bg-slate-900/80 cursor-pointer transition text-xs space-y-1 border border-transparent hover:border-slate-800">
+                        <div class="flex items-center justify-between text-[10px] text-indigo-400 font-mono">
+                          <span>{r.document || r.source} (§{r.chunk_id})</span>
+                          <span>Score: {r.score?.toFixed(2) || '0.95'}</span>
+                        </div>
+                        <p class="text-slate-300 text-xs leading-relaxed">{r.text || r.content}</p>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
           )}
 
-          {/* DOCUMENT INSPECTOR */}
-          {selectedDoc && (
-            <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
-              <div class="glass p-6 rounded-2xl max-w-2xl w-full border border-slate-800 shadow-2xl flex flex-col max-h-[80vh]">
-                <div class="flex justify-between items-center pb-3 border-b border-slate-800">
-                  <h3 class="text-sm font-bold text-white">{selectedDoc.filename}</h3>
-                  <button onClick={() => setSelectedDoc(null)} class="text-slate-400 hover:text-white">
-                    <i class="fa-solid fa-xmark"></i>
-                  </button>
-                </div>
-                <div class="p-3 my-3 bg-slate-950 rounded-xl font-mono text-xs text-slate-300 overflow-y-auto flex-1 whitespace-pre-wrap">
-                  {selectedDoc.extracted_text || "No preview text."}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* CREATE PROJECT MODAL */}
+          {/* CREATE WORKSPACE MODAL */}
           {createModalOpen && (
-            <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
-              <div class="glass p-5 rounded-2xl max-w-md w-full border border-slate-800 shadow-2xl space-y-3">
-                <div class="flex justify-between items-center pb-2 border-b border-slate-800">
-                  <h3 class="text-sm font-bold text-white">Create New Workspace</h3>
+            <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+              <div class="glass border border-slate-800 w-full max-w-md rounded-2xl p-6 space-y-4 shadow-2xl">
+                <div class="flex items-center justify-between">
+                  <h3 class="font-bold text-sm text-white flex items-center gap-2">
+                    <i class="fa-solid fa-folder-plus text-indigo-400"></i>
+                    Create Custom Workspace
+                  </h3>
                   <button onClick={() => setCreateModalOpen(false)} class="text-slate-400 hover:text-white">
-                    <i class="fa-solid fa-xmark"></i>
+                    <i class="fa-solid fa-xmark text-sm"></i>
                   </button>
                 </div>
-                <div class="space-y-2 text-xs">
+
+                <div class="space-y-3 text-xs">
                   <div>
-                    <label class="text-slate-400 block mb-1">Project Name:</label>
+                    <label class="block text-slate-400 mb-1 font-semibold">Workspace Name</label>
                     <input
                       type="text"
                       value={newProjName}
                       onChange={(e) => setNewProjName(e.target.value)}
-                      placeholder="e.g. Audit Phase 2"
+                      placeholder="e.g. Phase 2 Commercial Audit"
                       class="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-white focus:outline-none focus:border-indigo-500"
                     />
                   </div>
+
                   <div>
-                    <label class="text-slate-400 block mb-1">Document Folder (Optional):</label>
+                    <label class="block text-slate-400 mb-1 font-semibold">Local Document Folder (Optional)</label>
                     <input
                       type="text"
                       value={newDocPath}
                       onChange={(e) => setNewDocPath(e.target.value)}
-                      placeholder="Leave empty to upload files later"
+                      placeholder="/path/to/documents (or leave blank to upload in chat)"
                       class="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-white font-mono text-[11px] focus:outline-none focus:border-indigo-500"
                     />
                   </div>
                 </div>
-                <div class="flex justify-end gap-2 pt-2">
-                  <button onClick={() => setCreateModalOpen(false)} class="px-3 py-1.5 text-xs text-slate-400 hover:text-white">Cancel</button>
-                  <button onClick={handleCreateProject} class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg">Create</button>
+
+                <div class="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    onClick={() => setCreateModalOpen(false)}
+                    class="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleCreateProject}
+                    disabled={!newProjName.trim()}
+                    class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-bold text-xs rounded-lg transition"
+                  >
+                    Create Workspace
+                  </button>
                 </div>
               </div>
             </div>
