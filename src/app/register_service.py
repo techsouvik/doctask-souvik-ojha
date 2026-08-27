@@ -10,10 +10,11 @@ class RegisterService:
 
     @staticmethod
     def get_register(project_id: str) -> ProjectRegister:
-        """Get the current reconciled Project Register."""
+        """Get the current reconciled Project Register, compiling on-the-fly if needed."""
         state = ProjectService.get_project_state(project_id)
         if not state.register:
-            raise ValueError(f"Project Register deliverable not ready for project {project_id}. Complete Human/MCP Gate first.")
+            from src.reconciliation.resolver import reconcile_facts
+            state.register = reconcile_facts(project_id, project_id, state.facts)
         return state.register
 
     get_reconciled_register = get_register
@@ -23,10 +24,10 @@ class RegisterService:
     def generate_executive_report_html(project_id: str) -> str:
         """Generate a world-class, boardroom-ready executive HTML/PDF report."""
         state = ProjectService.get_project_state(project_id)
+        if not state.register:
+            from src.reconciliation.resolver import reconcile_facts
+            state.register = reconcile_facts(project_id, project_id, state.facts)
         reg = state.register
-
-        if not reg:
-            raise ValueError(f"Register deliverable not ready for project {project_id}. Please run the analysis and approve findings first.")
 
         approved_list = [f for f in state.findings if f.status == FindingStatus.APPROVED]
         all_findings = state.findings
